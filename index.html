@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>엑셀 개인정보 마스킹 도구 - 프로그램 설명</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --green: #16a34a;
+    --green-light: #bbf7d0;
+    --dark: #0f172a;
+    --gray: #64748b;
+    --light: #f1f5f9;
+    --slide-width: 100vw;
+    --slide-height: 100vh;
+  }
+
+  html { scroll-behavior: smooth; scroll-snap-type: y mandatory; overflow-y: scroll; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: #0f172a; color: #e2e8f0; }
+
+  /* ── Slide Container ── */
+  .slide {
+    width: var(--slide-width);
+    height: var(--slide-height);
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── Slide Themes ── */
+  .slide--hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+  }
+  .slide--white {
+    background: #ffffff;
+    color: #0f172a;
+  }
+  .slide--dark {
+    background: #0f172a;
+  }
+  .slide--blue {
+    background: linear-gradient(135deg, #1e40af, #2563eb);
+  }
+  .slide--green {
+    background: linear-gradient(135deg, #065f46, #059669);
+  }
+  .slide--gradient {
+    background: linear-gradient(135deg, #1e1b4b, #312e81, #1e3a5f);
+  }
+
+  /* ── Typography ── */
+  .slide-number {
+    position: absolute;
+    top: 30px;
+    right: 40px;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 2px;
+  }
+  .slide--white .slide-number { color: rgba(0,0,0,0.2); }
+
+  h1 { font-size: 3.2rem; font-weight: 900; line-height: 1.3; margin-bottom: 20px; }
+  h2 { font-size: 2.4rem; font-weight: 700; line-height: 1.3; margin-bottom: 24px; }
+  h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 16px; }
+  .subtitle { font-size: 1.3rem; font-weight: 300; color: #94a3b8; line-height: 1.6; }
+  .slide--white .subtitle { color: #64748b; }
+
+  .highlight { color: #60a5fa; }
+  .highlight-green { color: #4ade80; }
+  .highlight-yellow { color: #fbbf24; }
+  .slide--white .highlight { color: #2563eb; }
+
+  /* ── Hero Slide ── */
+  .hero-icon {
+    font-size: 5rem;
+    margin-bottom: 20px;
+    display: block;
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 6px 18px;
+    border-radius: 20px;
+    background: rgba(37, 99, 235, 0.2);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #60a5fa;
+    margin-bottom: 24px;
+    letter-spacing: 1px;
+  }
+
+  /* ── Content Layout ── */
+  .content-wrapper {
+    max-width: 1100px;
+    width: 100%;
+    text-align: center;
+  }
+  .content-left {
+    text-align: left;
+    max-width: 1100px;
+    width: 100%;
+  }
+
+  /* ── Grid Layouts ── */
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    margin-top: 36px;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+    margin-top: 36px;
+  }
+  .grid-5 {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-top: 36px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+  .slide--white .card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+  .slide--white .card:hover {
+    box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+  }
+
+  .card-icon {
+    font-size: 2.8rem;
+    margin-bottom: 16px;
+    display: block;
+  }
+  .card h3 { font-size: 1.1rem; margin-bottom: 10px; }
+  .card p { font-size: 0.9rem; line-height: 1.6; color: #94a3b8; }
+  .slide--white .card p { color: #64748b; }
+
+  /* ── Code Block ── */
+  .code-block {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 0.95rem;
+    line-height: 1.8;
+    text-align: left;
+    overflow-x: auto;
+    color: #e2e8f0;
+  }
+  .code-comment { color: #64748b; }
+  .code-string { color: #4ade80; }
+  .code-keyword { color: #60a5fa; }
+  .code-func { color: #fbbf24; }
+  .code-num { color: #f472b6; }
+
+  /* ── Flow Diagram ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 40px;
+    flex-wrap: wrap;
+  }
+  .flow-step {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 20px 24px;
+    text-align: center;
+    min-width: 140px;
+  }
+  .flow-step .step-icon { font-size: 2rem; margin-bottom: 8px; display: block; }
+  .flow-step .step-label { font-size: 0.85rem; font-weight: 500; }
+  .flow-arrow { font-size: 1.5rem; color: #60a5fa; }
+
+  /* ── Masking Example Table ── */
+  .mask-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 30px;
+    font-size: 0.95rem;
+  }
+  .mask-table th {
+    background: rgba(37, 99, 235, 0.15);
+    padding: 14px 20px;
+    text-align: left;
+    font-weight: 700;
+    border-bottom: 2px solid rgba(96, 165, 250, 0.3);
+  }
+  .mask-table td {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .mask-table tr:hover { background: rgba(255,255,255,0.03); }
+  .original { color: #f87171; }
+  .masked { color: #4ade80; font-weight: 500; }
+
+  .slide--white .mask-table th {
+    background: #eff6ff;
+    border-bottom: 2px solid #bfdbfe;
+    color: #1e40af;
+  }
+  .slide--white .mask-table td {
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+  }
+  .slide--white .original { color: #dc2626; }
+  .slide--white .masked { color: #16a34a; }
+
+  /* ── Detection Card (Slide 5) ── */
+  .detect-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+  }
+  .detect-card .card-icon { font-size: 2rem; margin-bottom: 8px; }
+  .detect-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
+  .detect-card .regex {
+    font-family: 'Consolas', monospace;
+    font-size: 0.72rem;
+    color: #4ade80;
+    background: rgba(0,0,0,0.3);
+    padding: 6px 8px;
+    border-radius: 6px;
+    display: block;
+    margin-top: 8px;
+    word-break: break-all;
+  }
+
+  /* ── Scoring Visual ── */
+  .score-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+  }
+  .score-label { width: 100px; text-align: right; font-size: 0.9rem; font-weight: 500; }
+  .score-bar {
+    flex: 1;
+    height: 28px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+  }
+  .score-fill {
+    height: 100%;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: white;
+    transition: width 1s ease;
+  }
+
+  /* ── Navigation ── */
+  .nav-dots {
+    position: fixed;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 100;
+  }
+  .nav-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s;
+    padding: 0;
+  }
+  .nav-dot.active {
+    background: #60a5fa;
+    box-shadow: 0 0 10px rgba(96,165,250,0.5);
+    transform: scale(1.3);
+  }
+
+  /* ── Keyboard hint ── */
+  .kbd-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.25);
+    z-index: 100;
+    letter-spacing: 1px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .slide { padding: 40px 30px; }
+    h1 { font-size: 2.2rem; }
+    h2 { font-size: 1.6rem; }
+    .grid-3, .grid-5 { grid-template-columns: 1fr 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .flow { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation Dots -->
+<nav class="nav-dots" id="navDots"></nav>
+<div class="kbd-hint">scroll or arrow keys to navigate</div>
+
+<!-- ======================== SLIDE 1: Title ======================== -->
+<section class="slide slide--hero" id="slide1">
+  <span class="slide-number">01 / 10</span>
+  <div class="content-wrapper">
+    <span class="hero-icon">&#x1F512;</span>
+    <div class="badge">PYTHON DESKTOP APPLICATION</div>
+    <h1>엑셀 개인정보<br><span class="highlight">마스킹 도구</span></h1>
+    <p class="subtitle">
+      엑셀 파일의 개인정보를 자동으로 감지하고<br>
+      안전하게 비식별화하는 데스크톱 애플리케이션
+    </p>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 2: Problem ======================== -->
+<section class="slide slide--white" id="slide2">
+  <span class="slide-number">02 / 10</span>
+  <div class="content-wrapper">
+    <h2>왜 개인정보 마스킹이 필요한가?</h2>
+    <p class="subtitle" style="margin-bottom:10px;">개인정보 유출은 법적 처벌과 신뢰 상실로 이어집니다</p>
+    <div class="grid-3">
+      <div class="card">
+        <span class="card-icon">&#x2696;&#xFE0F;</span>
+        <h3>법적 의무</h3>
+        <p>개인정보보호법에 따라<br>비식별 처리가 필수인<br>데이터가 점점 늘어나고 있습니다</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x26A0;&#xFE0F;</span>
+        <h3>유출 위험</h3>
+        <p>이름, 전화번호, 주민번호 등<br>엑셀로 관리되는 개인정보는<br>유출 시 큰 피해를 초래합니다</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x23F1;&#xFE0F;</span>
+        <h3>수작업의 한계</h3>
+        <p>수백~수천 건의 데이터를<br>일일이 마스킹하는 것은<br>비효율적이고 실수가 발생합니다</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 3: Overview ======================== -->
+<section class="slide slide--dark" id="slide3">
+  <span class="slide-number">03 / 10</span>
+  <div class="content-wrapper">
+    <h2>프로그램 전체 동작 흐름</h2>
+    <p class="subtitle">4단계로 완성되는 자동 마스킹</p>
+    <div class="flow">
+      <div class="flow-step">
+        <span class="step-icon">&#x1F4C2;</span>
+        <span class="step-label">엑셀 파일 열기</span>
+      </div>
+      <span class="flow-arrow">&#x27A1;&#xFE0F;</span>
+      <div class="flow-step" style="border-color: #60a5fa;">
+        <span class="step-icon">&#x1F50D;</span>
+        <span class="step-label">컬럼 자동 감지</span>
+      </div>
+      <span class="flow-arrow">&#x27A1;&#xFE0F;</span>
+      <div class="flow-step">
+        <span class="step-icon">&#x2705;</span>
+        <span class="step-label">사용자 확인/수정</span>
+      </div>
+      <span class="flow-arrow">&#x27A1;&#xFE0F;</span>
+      <div class="flow-step" style="border-color: #4ade80;">
+        <span class="step-icon">&#x1F512;</span>
+        <span class="step-label">마스킹 실행 & 저장</span>
+      </div>
+    </div>
+    <div style="margin-top:50px;">
+      <div class="grid-2">
+        <div class="card" style="text-align:left;">
+          <h3>&#x1F4CB; 입력</h3>
+          <p>개인정보가 포함된 원본 엑셀 파일<br>(.xlsx, .xls 형식 지원)</p>
+        </div>
+        <div class="card" style="text-align:left;">
+          <h3>&#x1F4E4; 출력</h3>
+          <p>마스킹이 적용된 새 엑셀 파일<br>(원본 파일은 변경되지 않음)</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 4: Tech Stack ======================== -->
+<section class="slide slide--gradient" id="slide4">
+  <span class="slide-number">04 / 10</span>
+  <div class="content-wrapper">
+    <h2>사용된 기술 스택</h2>
+    <p class="subtitle">Python 기반의 가볍고 강력한 구성</p>
+    <div class="grid-3" style="margin-top: 40px;">
+      <div class="card">
+        <span class="card-icon">&#x1F40D;</span>
+        <h3>Python 3</h3>
+        <p>메인 프로그래밍 언어<br>간결하고 강력한 문법으로<br>핵심 로직 구현</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x1F5BC;&#xFE0F;</span>
+        <h3>tkinter</h3>
+        <p>GUI 프레임워크<br>별도 설치 없이 Python에<br>기본 포함된 UI 도구</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x1F43C;</span>
+        <h3>pandas</h3>
+        <p>데이터 처리 라이브러리<br>엑셀 파일 읽기/쓰기 및<br>컬럼 단위 데이터 처리</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x1F9E9;</span>
+        <h3>정규표현식 (re)</h3>
+        <p>패턴 매칭 엔진<br>개인정보 유형을 자동으로<br>판별하는 핵심 기술</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x1F4CA;</span>
+        <h3>openpyxl</h3>
+        <p>엑셀 파일 엔진<br>.xlsx 형식의 읽기/쓰기를<br>지원하는 라이브러리</p>
+      </div>
+      <div class="card">
+        <span class="card-icon">&#x1F4E6;</span>
+        <h3>PyInstaller</h3>
+        <p>실행 파일 빌드<br>Python 없이도 실행 가능한<br>.exe 파일 생성</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 5: Auto Detection ======================== -->
+<section class="slide slide--dark" id="slide5">
+  <span class="slide-number">05 / 10</span>
+  <div class="content-left">
+    <h2 style="text-align:center;">&#x1F50D; 핵심 원리: 자동 감지는 어떻게 작동하는가?</h2>
+    <p class="subtitle" style="text-align:center;">각 컬럼의 데이터를 샘플링하여 5가지 정규표현식 패턴으로 매칭</p>
+    <div class="grid-5">
+      <div class="detect-card">
+        <span class="card-icon">&#x1F464;</span>
+        <h3>이름</h3>
+        <span class="regex">^[가-힣]{2,4}$</span>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:8px;">한글 2~4자</p>
+      </div>
+      <div class="detect-card">
+        <span class="card-icon">&#x1F4DE;</span>
+        <h3>전화번호</h3>
+        <span class="regex">0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}</span>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:8px;">010-XXXX-XXXX</p>
+      </div>
+      <div class="detect-card">
+        <span class="card-icon">&#x2709;&#xFE0F;</span>
+        <h3>이메일</h3>
+        <span class="regex">[^@\s]+@[^@\s]+\.[^@\s]+</span>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:8px;">user@domain.com</p>
+      </div>
+      <div class="detect-card">
+        <span class="card-icon">&#x1F4CB;</span>
+        <h3>주민등록번호</h3>
+        <span class="regex">\d{6}[-\s]?\d{7}</span>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:8px;">XXXXXX-XXXXXXX</p>
+      </div>
+      <div class="detect-card">
+        <span class="card-icon">&#x1F3E0;</span>
+        <h3>주소</h3>
+        <span class="regex">서울|부산|대구|인천|...</span>
+        <p style="font-size:0.78rem; color:#94a3b8; margin-top:8px;">17개 시/도 키워드</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 6: Scoring System ======================== -->
+<section class="slide slide--blue" id="slide6">
+  <span class="slide-number">06 / 10</span>
+  <div class="content-left">
+    <h2 style="text-align:center;">&#x1F3AF; 점수 기반 분류 시스템</h2>
+    <p class="subtitle" style="text-align:center; margin-bottom: 10px;">
+      각 컬럼에서 최대 20개의 데이터를 샘플링하여 패턴별 점수를 매깁니다
+    </p>
+    <div class="grid-2" style="align-items: start;">
+      <div>
+        <h3 style="margin-bottom: 20px; color: #bfdbfe;">예시: "연락처" 컬럼 분석</h3>
+        <div style="margin-bottom:10px;">
+          <div class="score-bar-container">
+            <span class="score-label">전화번호</span>
+            <div class="score-bar">
+              <div class="score-fill" style="width:85%; background: linear-gradient(90deg, #2563eb, #60a5fa);">17/20</div>
+            </div>
+          </div>
+          <div class="score-bar-container">
+            <span class="score-label">이름</span>
+            <div class="score-bar">
+              <div class="score-fill" style="width:5%; background: #475569;">1</div>
+            </div>
+          </div>
+          <div class="score-bar-container">
+            <span class="score-label">이메일</span>
+            <div class="score-bar">
+              <div class="score-fill" style="width:0%; background: #475569;"></div>
+            </div>
+          </div>
+          <div class="score-bar-container">
+            <span class="score-label">주민번호</span>
+            <div class="score-bar">
+              <div class="score-fill" style="width:0%; background: #475569;"></div>
+            </div>
+          </div>
+          <div class="score-bar-container">
+            <span class="score-label">주소</span>
+            <div class="score-bar">
+              <div class="score-fill" style="width:0%; background: #475569;"></div>
+            </div>
+          </div>
+        </div>
+        <p style="margin-top: 16px; font-size: 0.9rem; color: #bfdbfe;">
+          &#x2705; 전화번호 점수가 가장 높음 &rarr; <strong>"전화번호"</strong>로 분류!
+        </p>
+      </div>
+      <div>
+        <h3 style="margin-bottom: 20px; color: #bfdbfe;">분류 기준 (Threshold)</h3>
+        <div class="card" style="background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.15); text-align: left;">
+          <div class="code-block" style="background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.1); font-size: 0.88rem;">
+            <span class="code-comment"># 최고 점수가 아래 조건을 충족해야 함</span><br>
+            <span class="code-keyword">if</span> 최고점수 >= <span class="code-func">max</span>(<span class="code-num">2</span>, 샘플수 &times; <span class="code-num">0.3</span>):<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> <span class="code-string">해당 유형</span><br>
+            <span class="code-keyword">else</span>:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> <span class="code-string">"없음"</span>
+          </div>
+          <p style="margin-top: 16px; font-size: 0.88rem; color: #cbd5e1; line-height: 1.7;">
+            <strong style="color: #fbbf24;">최소 2개</strong> 이상 매칭되어야 하며,<br>
+            샘플 수의 <strong style="color: #fbbf24;">30% 이상</strong>이 매칭되어야<br>
+            해당 유형으로 분류됩니다.<br><br>
+            &rarr; <strong>오탐 방지</strong>를 위한 이중 안전장치
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 7: Masking Rules ======================== -->
+<section class="slide slide--white" id="slide7">
+  <span class="slide-number">07 / 10</span>
+  <div class="content-left">
+    <h2 style="text-align:center;">&#x1F512; 5가지 마스킹 규칙</h2>
+    <p class="subtitle" style="text-align:center;">각 개인정보 유형에 최적화된 마스킹 패턴을 적용합니다</p>
+    <table class="mask-table">
+      <thead>
+        <tr>
+          <th style="width:12%;">유형</th>
+          <th style="width:22%;">원본 데이터</th>
+          <th style="width:22%;">마스킹 결과</th>
+          <th>마스킹 규칙</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>&#x1F464; 이름</strong></td>
+          <td class="original">홍길동</td>
+          <td class="masked">홍*동</td>
+          <td>첫 글자 + 가운데 * + 마지막 글자</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td class="original">김민</td>
+          <td class="masked">김*</td>
+          <td>2글자일 경우: 첫 글자 + *</td>
+        </tr>
+        <tr>
+          <td><strong>&#x1F4DE; 전화번호</strong></td>
+          <td class="original">010-1234-5678</td>
+          <td class="masked">010-****-5678</td>
+          <td>앞 3자리 + **** + 뒤 4자리</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td class="original">02-123-4567</td>
+          <td class="masked">02-***-4567</td>
+          <td>10자리: 앞 지역번호 + *** + 뒤 4자리</td>
+        </tr>
+        <tr>
+          <td><strong>&#x2709;&#xFE0F; 이메일</strong></td>
+          <td class="original">hong@gmail.com</td>
+          <td class="masked">ho**@gmail.com</td>
+          <td>로컬 파트 1/3만 유지, 도메인 보존</td>
+        </tr>
+        <tr>
+          <td><strong>&#x1F4CB; 주민번호</strong></td>
+          <td class="original">910101-1234567</td>
+          <td class="masked">******-*******</td>
+          <td>전체 완전 마스킹 (가장 강력한 보호)</td>
+        </tr>
+        <tr>
+          <td><strong>&#x1F3E0; 주소</strong></td>
+          <td class="original">서울시 강남구 역삼동 123</td>
+          <td class="masked">서울시 *** *** ***</td>
+          <td>시/도 이름만 유지, 나머지 마스킹</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 8: Code Deep-dive ======================== -->
+<section class="slide slide--dark" id="slide8">
+  <span class="slide-number">08 / 10</span>
+  <div class="content-left">
+    <h2 style="text-align:center;">&#x1F4BB; 핵심 코드 분석</h2>
+    <p class="subtitle" style="text-align:center;">자동 감지 함수 <code style="color:#60a5fa;">detect_column_type()</code> 의 실제 동작</p>
+    <div class="code-block" style="margin-top: 30px; font-size: 0.85rem; line-height: 1.9;">
+      <span class="code-keyword">def</span> <span class="code-func">detect_column_type</span>(series):<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 1단계: 컬럼에서 최대 20개 비어있지 않은 값 샘플링</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;sample = series.<span class="code-func">dropna</span>().<span class="code-func">astype</span>(str).<span class="code-func">head</span>(<span class="code-num">20</span>)<br>
+      <br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 2단계: 5가지 정규표현식 패턴 정의</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;phone_pat = re.<span class="code-func">compile</span>(<span class="code-string">r"0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}"</span>)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;email_pat = re.<span class="code-func">compile</span>(<span class="code-string">r"[^@\s]+@[^@\s]+\.[^@\s]+"</span>)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;rrn_pat &nbsp; = re.<span class="code-func">compile</span>(<span class="code-string">r"\d{6}[-\s]?\d{7}"</span>)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;addr_pat &nbsp;= re.<span class="code-func">compile</span>(<span class="code-string">r"(?:서울|부산|대구|...17개 시도)"</span>)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;name_pat &nbsp;= re.<span class="code-func">compile</span>(<span class="code-string">r"^[가-힣]{2,4}$"</span>)<br>
+      <br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 3단계: 각 샘플에 대해 5가지 패턴 매칭 &rarr; 점수 누적</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;scores = {<span class="code-string">"이름"</span>: <span class="code-num">0</span>, <span class="code-string">"전화번호"</span>: <span class="code-num">0</span>, <span class="code-string">"이메일"</span>: <span class="code-num">0</span>, ...}<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">for</span> v <span class="code-keyword">in</span> sample:<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> phone_pat.<span class="code-func">search</span>(v): &nbsp;scores[<span class="code-string">"전화번호"</span>] += <span class="code-num">1</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> email_pat.<span class="code-func">search</span>(v): &nbsp;scores[<span class="code-string">"이메일"</span>] &nbsp;+= <span class="code-num">1</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;... <span class="code-comment"># 나머지 패턴도 동일하게 검사</span><br>
+      <br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 4단계: 최고 점수 유형 선택 (임계값 이상일 때만)</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;best = <span class="code-func">max</span>(scores, key=scores.get)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> best <span class="code-keyword">if</span> scores[best] >= <span class="code-func">max</span>(<span class="code-num">2</span>, <span class="code-func">len</span>(sample) * <span class="code-num">0.3</span>) <span class="code-keyword">else</span> <span class="code-string">"없음"</span>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 9: GUI ======================== -->
+<section class="slide slide--white" id="slide9">
+  <span class="slide-number">09 / 10</span>
+  <div class="content-wrapper">
+    <h2>&#x1F5A5;&#xFE0F; GUI 사용자 인터페이스</h2>
+    <p class="subtitle" style="margin-bottom: 12px;">직관적인 UI로 누구나 쉽게 사용할 수 있습니다</p>
+    <div class="grid-2" style="margin-top: 20px; text-align: left;">
+      <div>
+        <!-- Mock GUI -->
+        <div style="background: #f4f6f9; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); border: 1px solid #e2e8f0;">
+          <!-- Title bar -->
+          <div style="background: #2563eb; padding: 12px 16px; display: flex; align-items: center; gap: 8px;">
+            <span style="color: white; font-size: 0.9rem; font-weight: 700;">&#x1F512; 엑셀 개인정보 마스킹 도구</span>
+          </div>
+          <!-- File section -->
+          <div style="padding: 12px 16px;">
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; gap: 8px;">
+              <span style="color: #94a3b8; font-size: 0.8rem; flex: 1;">C:\data\직원명부.xlsx</span>
+              <span style="background: #2563eb; color: white; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px;">파일 열기</span>
+            </div>
+          </div>
+          <!-- Column list -->
+          <div style="padding: 0 16px 12px;">
+            <div style="font-size: 0.75rem; font-weight: 700; color: #64748b; padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: grid; grid-template-columns: 30px 1fr 1fr 100px; gap: 4px;">
+              <span></span><span>컬럼명</span><span>미리보기</span><span>유형</span>
+            </div>
+            <!-- Row 1 -->
+            <div style="font-size: 0.78rem; padding: 8px 0; background: #f0fdf4; display: grid; grid-template-columns: 30px 1fr 1fr 100px; gap: 4px; align-items: center; border-radius: 4px; margin-top: 4px; padding-left: 4px;">
+              <span style="color: #16a34a;">&#x2611;</span>
+              <span style="font-weight: 600;">이름</span>
+              <span style="color: #64748b;">홍길동, 김영희, 이...</span>
+              <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; text-align: center;">이름</span>
+            </div>
+            <!-- Row 2 -->
+            <div style="font-size: 0.78rem; padding: 8px 0; background: #f0fdf4; display: grid; grid-template-columns: 30px 1fr 1fr 100px; gap: 4px; align-items: center; border-radius: 4px; margin-top: 2px; padding-left: 4px;">
+              <span style="color: #16a34a;">&#x2611;</span>
+              <span style="font-weight: 600;">전화번호</span>
+              <span style="color: #64748b;">010-1234-5678, ...</span>
+              <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; text-align: center;">전화번호</span>
+            </div>
+            <!-- Row 3 -->
+            <div style="font-size: 0.78rem; padding: 8px 0; background: white; display: grid; grid-template-columns: 30px 1fr 1fr 100px; gap: 4px; align-items: center; border-radius: 4px; margin-top: 2px; padding-left: 4px;">
+              <span style="color: #cbd5e1;">&#x2610;</span>
+              <span style="font-weight: 600;">부서</span>
+              <span style="color: #64748b;">개발팀, 마케팅팀, ...</span>
+              <span style="background: #f1f5f9; color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; text-align: center;">없음</span>
+            </div>
+            <!-- Row 4 -->
+            <div style="font-size: 0.78rem; padding: 8px 0; background: #f0fdf4; display: grid; grid-template-columns: 30px 1fr 1fr 100px; gap: 4px; align-items: center; border-radius: 4px; margin-top: 2px; padding-left: 4px;">
+              <span style="color: #16a34a;">&#x2611;</span>
+              <span style="font-weight: 600;">주소</span>
+              <span style="color: #64748b;">서울시 강남구 역삼...</span>
+              <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; text-align: center;">주소</span>
+            </div>
+          </div>
+          <!-- Bottom bar -->
+          <div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e8f0;">
+            <span style="font-size: 0.75rem; color: #64748b;">&#x2705; 120행 x 5열 로드 완료</span>
+            <span style="background: #16a34a; color: white; font-size: 0.8rem; padding: 6px 16px; border-radius: 6px; font-weight: 700;">마스킹 실행 및 저장</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="padding-left: 12px;">
+          <h3 style="color: #2563eb; font-size: 1.2rem; margin-bottom: 20px;">UI 기능 설명</h3>
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 0.95rem;">&#x1F4C2; 파일 선택 영역</h3>
+            <p style="color: #64748b; font-size: 0.88rem; line-height: 1.6;">엑셀 파일을 열면 자동으로 모든 컬럼을 분석합니다</p>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 0.95rem;">&#x1F7E2; 녹색 배경 행</h3>
+            <p style="color: #64748b; font-size: 0.88rem; line-height: 1.6;">개인정보가 자동 감지된 컬럼<br>체크박스가 자동으로 선택됩니다</p>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 0.95rem;">&#x26AA; 흰색 배경 행</h3>
+            <p style="color: #64748b; font-size: 0.88rem; line-height: 1.6;">개인정보가 아닌 것으로 판단된 컬럼<br>필요 시 수동으로 유형을 변경할 수 있습니다</p>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <h3 style="font-size: 0.95rem;">&#x1F50D; 미리보기</h3>
+            <p style="color: #64748b; font-size: 0.88rem; line-height: 1.6;">각 컬럼의 처음 3개 데이터를 보여줘<br>사용자가 직접 확인할 수 있습니다</p>
+          </div>
+          <div>
+            <h3 style="font-size: 0.95rem;">&#x1F3AF; 드롭다운 선택기</h3>
+            <p style="color: #64748b; font-size: 0.88rem; line-height: 1.6;">자동 감지가 틀린 경우<br>사용자가 직접 마스킹 유형을 지정할 수 있습니다</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SLIDE 10: Summary ======================== -->
+<section class="slide slide--hero" id="slide10">
+  <span class="slide-number">10 / 10</span>
+  <div class="content-wrapper">
+    <h2>&#x1F4DD; 정리</h2>
+    <div class="grid-2" style="margin-top: 30px; text-align: left;">
+      <div class="card" style="padding: 36px 28px;">
+        <h3 style="color: #60a5fa; font-size: 1.1rem; margin-bottom: 16px;">&#x2699;&#xFE0F; 동작 원리 요약</h3>
+        <ul style="list-style: none; line-height: 2.2; font-size: 0.92rem;">
+          <li>&#x2460; pandas로 엑셀 파일을 DataFrame으로 로드</li>
+          <li>&#x2461; 각 컬럼에서 최대 20개 데이터를 샘플링</li>
+          <li>&#x2462; 5가지 정규표현식으로 패턴 매칭 점수 계산</li>
+          <li>&#x2463; 임계값(30% &amp; 최소 2개) 이상이면 유형 확정</li>
+          <li>&#x2464; 유형별 마스킹 함수로 데이터 비식별화</li>
+          <li>&#x2465; 새 엑셀 파일로 안전하게 저장</li>
+        </ul>
+      </div>
+      <div class="card" style="padding: 36px 28px;">
+        <h3 style="color: #4ade80; font-size: 1.1rem; margin-bottom: 16px;">&#x2B50; 핵심 특징</h3>
+        <ul style="list-style: none; line-height: 2.2; font-size: 0.92rem;">
+          <li>&#x2705; <strong>자동 감지</strong> &mdash; 정규표현식 기반 지능형 분류</li>
+          <li>&#x2705; <strong>비파괴적</strong> &mdash; 원본 파일 보존</li>
+          <li>&#x2705; <strong>사용자 제어</strong> &mdash; 자동 + 수동 하이브리드</li>
+          <li>&#x2705; <strong>비가역적 마스킹</strong> &mdash; 복원 불가능한 보안</li>
+          <li>&#x2705; <strong>한국 최적화</strong> &mdash; 한국어 이름, 주소, 주민번호</li>
+          <li>&#x2705; <strong>단독 실행</strong> &mdash; .exe 파일로 배포 가능</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top: 40px; font-size: 0.9rem; color: #94a3b8;">
+      엑셀 개인정보 마스킹 도구 &mdash; 정규표현식과 점수 기반 분류로 자동 비식별화를 실현합니다
+    </p>
+  </div>
+</section>
+
+<script>
+  // ── Navigation dots ──
+  const slides = document.querySelectorAll('.slide');
+  const navDots = document.getElementById('navDots');
+
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'nav-dot';
+    dot.title = `Slide ${i + 1}`;
+    dot.addEventListener('click', () => {
+      slides[i].scrollIntoView({ behavior: 'smooth' });
+    });
+    navDots.appendChild(dot);
+  });
+
+  // ── Active dot on scroll ──
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const idx = Array.from(slides).indexOf(entry.target);
+        document.querySelectorAll('.nav-dot').forEach((d, i) => {
+          d.classList.toggle('active', i === idx);
+        });
+      }
+    });
+  }, { threshold: 0.55 });
+
+  slides.forEach(s => observer.observe(s));
+
+  // ── Keyboard navigation ──
+  let currentSlide = 0;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown') {
+      e.preventDefault();
+      currentSlide = Math.min(currentSlide + 1, slides.length - 1);
+      slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      currentSlide = Math.max(currentSlide - 1, 0);
+      slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      currentSlide = 0;
+      slides[0].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      currentSlide = slides.length - 1;
+      slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // Sync currentSlide with scroll
+  const scrollObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        currentSlide = Array.from(slides).indexOf(entry.target);
+      }
+    });
+  }, { threshold: 0.55 });
+  slides.forEach(s => scrollObserver.observe(s));
+</script>
+
+</body>
+</html>
