@@ -14,5 +14,6 @@ __pycache__/
 # 임시/IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.log

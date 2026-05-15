@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>엑셀 개인정보 마스킹 도구</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: '맑은 고딕', 'Malgun Gothic', -apple-system, sans-serif;
+    background: linear-gradient(135deg, #f4f6f9 0%, #e2e8f0 100%);
+    margin: 0;
+    padding: 20px;
+    color: #1e293b;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 760px;
+    margin: 30px auto;
+    background: white;
+    padding: 48px;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  }
+  h1 {
+    color: #2563eb;
+    border-bottom: 3px solid #e2e8f0;
+    padding-bottom: 14px;
+    margin-top: 0;
+  }
+  h2 {
+    color: #1e293b;
+    margin-top: 32px;
+    font-size: 20px;
+  }
+  .download-box {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 2px solid #16a34a;
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    margin: 28px 0;
+  }
+  .download-btn {
+    display: inline-block;
+    background: #16a34a;
+    color: white;
+    padding: 16px 48px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 8px;
+    text-decoration: none;
+    margin: 10px 0;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+  }
+  .download-btn:hover {
+    background: #15803d;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.4);
+  }
+  .meta {
+    font-size: 14px;
+    color: #475569;
+  }
+  .info-grid {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 10px 16px;
+    margin: 16px 0;
+  }
+  .info-grid div:nth-child(odd) {
+    color: #2563eb;
+    font-weight: bold;
+  }
+  .note {
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    padding: 14px 18px;
+    margin: 20px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  code {
+    background: #e2e8f0;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'D2Coding', monospace;
+    font-size: 14px;
+  }
+  .features {
+    background: #f1f5f9;
+    padding: 20px 28px;
+    border-radius: 10px;
+  }
+  .features ul {
+    margin: 8px 0;
+    padding-left: 22px;
+  }
+  .features li {
+    margin: 6px 0;
+  }
+  .footer {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+    margin-top: 36px;
+    padding-top: 20px;
+    border-top: 1px solid #e2e8f0;
+  }
+  .footer a { color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔒 엑셀 개인정보 마스킹 도구</h1>
+  <p>엑셀 파일의 개인정보(이름·전화번호·이메일·주민번호·주소)를 자동 감지하여 마스킹합니다. <strong>Python 설치 없이</strong> 더블클릭으로 바로 실행하세요.</p>
+
+  <div class="download-box">
+    <div class="meta">Windows 10/11 · 약 213 MB</div>
+    <a class="download-btn" href="https://github.com/kepcokn5701/data_masking_program/releases/latest/download/exel_masking.exe" download>
+      📥 다운로드 (최신 버전)
+    </a>
+    <div class="meta">더블클릭으로 실행 · 별도 설치 불필요</div>
+  </div>
+
+  <h2>📋 사용 방법</h2>
+  <div class="info-grid">
+    <div>1단계</div><div>위 버튼으로 <code>exel_masking.exe</code> 다운로드</div>
+    <div>2단계</div><div>다운로드한 파일을 더블클릭하여 실행</div>
+    <div>3단계</div><div>"파일 열기" 클릭 → 엑셀 파일(.xlsx) 선택</div>
+    <div>4단계</div><div>자동 감지된 마스킹 항목 확인 (수정 가능)</div>
+    <div>5단계</div><div>"마스킹 실행 및 저장" → 저장 위치 선택</div>
+  </div>
+
+  <h2>🎯 자동 감지 및 마스킹 예시</h2>
+  <div class="features">
+    <ul>
+      <li><strong>이름:</strong> 홍길동 → 홍*동</li>
+      <li><strong>전화번호:</strong> 010-1234-5678 → 010-****-5678</li>
+      <li><strong>이메일:</strong> hong@gmail.com → ho**@gmail.com</li>
+      <li><strong>주민등록번호:</strong> 900101-1234567 → ******-*******</li>
+      <li><strong>주소:</strong> 서울시 강남구 역삼동 → 서울시 *** ***</li>
+    </ul>
+  </div>
+
+  <div class="note">
+    <strong>⚠️ 첫 실행 시 안내:</strong> Windows Defender나 백신 프로그램이 PyInstaller로 패키징된 exe를 의심 파일로 잡을 수 있습니다. 정상 파일이니 "허용" 또는 "예외 등록"을 선택해 주세요. 사내 EDR에서 차단된다면 IT팀에 화이트리스트 등록을 요청하세요.
+  </div>
+
+  <div class="footer">
+    소스 코드: <a href="https://github.com/kepcokn5701/data_masking_program">github.com/kepcokn5701/data_masking_program</a><br>
+    문제 발생 시 GitHub Issues로 문의 부탁드립니다.
+  </div>
+</div>
+</body>
+</html>
