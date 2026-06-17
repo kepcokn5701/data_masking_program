@@ -1,279 +1,323 @@
+"""
+엑셀 N2SF 정보 분류·마스킹 도구 — 데스크톱 GUI
+────────────────────────────────────────────────────────────
+마스킹 로직은 공용 엔진(masking_engine.py)에 있으며 웹서버(web/app.py)와 공유한다.
+이 파일은 tkinter 화면만 담당한다.
+"""
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import pandas as pd
-import re
 import os
 import threading
 
-# ── 마스킹 함수들 ──────────────────────────────────────────────
+from masking_engine import (
+    STANDARD_NAME, STANDARD_TIMELINE, GUIDE_NOTE, TREND_NOTES,
+    GRADE_LABEL, GRADE_COLOR, GRADE_POLICY, GRADE_DEF, RISK_HIGH,
+    is_name_column, analyze_column, risk_of,
+    read_table, mask_dataframe, write_workbook, count_detections,
+)
 
-def mask_name(value):
-    """이름: 홍*동 (가운데 글자 *)"""
-    s = str(value).strip()
-    if len(s) == 2:
-        return s[0] + "*"
-    elif len(s) >= 3:
-        return s[0] + "*" * (len(s) - 2) + s[-1]
-    return s
 
-def mask_phone(value):
-    """전화번호: 010-****-5678"""
-    s = re.sub(r"[^\d]", "", str(value))
-    if len(s) == 11:
-        return f"{s[:3]}-****-{s[7:]}"
-    elif len(s) == 10:
-        return f"{s[:3]}-***-{s[6:]}"
-    return re.sub(r"\d{3,4}(?=\d{4})", "****", str(value))
+def _risk_style(pct):
+    """오탐 추정 %에 따른 (배경색, 글자색)."""
+    if pct >= RISK_HIGH:
+        return "#fee2e2", "#b91c1c"      # 높음
+    if pct >= 15:
+        return "#fef3c7", "#92400e"      # 보통
+    return "#dcfce7", "#166534"          # 낮음
 
-def mask_email(value):
-    """이메일: ho***@gmail.com"""
-    s = str(value).strip()
-    if "@" in s:
-        local, domain = s.split("@", 1)
-        keep = max(2, len(local) // 3)
-        return local[:keep] + "*" * (len(local) - keep) + "@" + domain
-    return s
-
-def mask_rrn(value):
-    """주민등록번호: ******-*******"""
-    s = re.sub(r"[^\d]", "", str(value))
-    if len(s) == 13:
-        return "******-*******"
-    return re.sub(r"\d", "*", str(value))
-
-def mask_address(value):
-    """주소: 서울시 ** ** *** (시/도 뒤 마스킹)"""
-    s = str(value).strip()
-    pattern = r"((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)(?:특별시|광역시|특별자치시|도|특별자치도)?)\s*(.*)"
-    m = re.match(pattern, s)
-    if m:
-        region = m.group(1)
-        rest = m.group(2)
-        masked_rest = re.sub(r"[가-힣a-zA-Z0-9]+", lambda x: "*" * len(x.group()), rest)
-        return region + " " + masked_rest
-    # 패턴 없으면 첫 단어 유지 후 마스킹
-    parts = s.split()
-    if len(parts) > 1:
-        return parts[0] + " " + " ".join("*" * len(p) for p in parts[1:])
-    return s
-
-# ── 컬럼 타입 자동 감지 ────────────────────────────────────────
-
-def detect_column_type(series):
-    sample = series.dropna().astype(str).head(20)
-    phone_pat = re.compile(r"0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}")
-    email_pat = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
-    rrn_pat   = re.compile(r"\d{6}[-\s]?\d{7}")
-    addr_pat  = re.compile(r"(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)")
-    name_pat  = re.compile(r"^[가-힣]{2,4}$")
-
-    scores = {"이름": 0, "전화번호": 0, "이메일": 0, "주민등록번호": 0, "주소": 0}
-    for v in sample:
-        if phone_pat.search(v):   scores["전화번호"] += 1
-        if email_pat.search(v):   scores["이메일"] += 1
-        if rrn_pat.search(v):     scores["주민등록번호"] += 1
-        if addr_pat.search(v):    scores["주소"] += 1
-        if name_pat.match(v):     scores["이름"] += 1
-
-    best = max(scores, key=scores.get)
-    return best if scores[best] >= max(2, len(sample) * 0.3) else "없음"
-
-MASK_FUNCS = {
-    "이름":        mask_name,
-    "전화번호":    mask_phone,
-    "이메일":      mask_email,
-    "주민등록번호": mask_rrn,
-    "주소":        mask_address,
-}
-
-# ── GUI ───────────────────────────────────────────────────────
 
 class MaskingApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("엑셀 개인정보 마스킹 도구")
-        self.geometry("720x560")
-        self.resizable(True, True)
+        self.title("엑셀 N2SF 정보 분류·마스킹 도구")
+        self.geometry("880x720")
+        self.minsize(820, 640)
         self.configure(bg="#f4f6f9")
 
         self.filepath = tk.StringVar()
-        self.df = None
-        self.col_vars = {}   # {col_name: StringVar (마스킹 타입)}
-        self.col_checks = {} # {col_name: BooleanVar (선택 여부)}
-
+        self.table = None
+        self.col_meta = {}     # {col: (grade, counts, before, after, name_col)}
+        self.col_checks = {}   # {col: BooleanVar}
+        self.ack_var = tk.BooleanVar(value=False)   # 확인 후 사용(게이트)
         self._build_ui()
 
     # ── UI 빌드 ───────────────────────────────────────────────
-
     def _build_ui(self):
-        # 헤더
-        hdr = tk.Frame(self, bg="#2563eb", pady=14)
+        hdr = tk.Frame(self, bg="#1e3a5f", pady=12)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="🔒  엑셀 개인정보 마스킹 도구",
-                 font=("맑은 고딕", 15, "bold"), fg="white", bg="#2563eb").pack()
+        tk.Label(hdr, text="🔒  엑셀 N2SF 정보 분류·마스킹 도구",
+                 font=("맑은 고딕", 15, "bold"), fg="white", bg="#1e3a5f").pack()
+        tk.Label(hdr, text="국정원 N2SF 기준 · 기밀(C) 완전 / 민감(S) 부분 / 공개(O) 유지",
+                 font=("맑은 고딕", 9), fg="#bcd0e8", bg="#1e3a5f").pack(pady=(2, 0))
 
-        # 파일 선택
-        frm = tk.LabelFrame(self, text=" 파일 선택 ", font=("맑은 고딕", 10, "bold"),
-                             bg="#f4f6f9", padx=10, pady=8)
-        frm.pack(fill="x", padx=18, pady=(14, 6))
+        # 근거 바 (외부 링크 없이 안내만)
+        srcbar = tk.Frame(self, bg="#eef2f7")
+        srcbar.pack(fill="x")
+        tk.Label(srcbar, text="근거:", font=("맑은 고딕", 8, "bold"),
+                 fg="#475569", bg="#eef2f7").pack(side="left", padx=(18, 4), pady=4)
+        tk.Button(srcbar, text="ℹ️ N2SF 기준·근거 보기", command=self._show_sources,
+                  bg="#dbeafe", fg="#1e3a5f", relief="flat",
+                  font=("맑은 고딕", 8, "bold"), padx=8).pack(side="left", padx=2, pady=2)
+        tk.Label(srcbar, text="원문: 국정원(국가사이버안보센터) 홈페이지에서 확인",
+                 font=("맑은 고딕", 8), fg="#64748b", bg="#eef2f7").pack(side="left", padx=6)
 
+        # ① 파일 선택
+        frm = tk.LabelFrame(self, text=" ① 파일 선택 ", font=("맑은 고딕", 10, "bold"),
+                            bg="#f4f6f9", padx=10, pady=8)
+        frm.pack(fill="x", padx=18, pady=(12, 6))
         tk.Entry(frm, textvariable=self.filepath, font=("맑은 고딕", 10),
-                 width=52, state="readonly").pack(side="left", padx=(0, 8))
+                 width=58, state="readonly").pack(side="left", padx=(0, 8))
         tk.Button(frm, text="파일 열기", command=self._open_file,
                   bg="#2563eb", fg="white", font=("맑은 고딕", 10),
-                  relief="flat", padx=10, pady=4).pack(side="left")
+                  relief="flat", padx=12, pady=4).pack(side="left")
 
-        # 컬럼 설정
-        self.col_frame_outer = tk.LabelFrame(self, text=" 마스킹할 컬럼 선택 ",
-                                              font=("맑은 고딕", 10, "bold"),
-                                              bg="#f4f6f9", padx=10, pady=8)
-        self.col_frame_outer.pack(fill="both", expand=True, padx=18, pady=6)
+        # ② 분류 결과
+        outer = tk.LabelFrame(self, text=" ② 자동 분류 결과 (체크된 컬럼만 마스킹) ",
+                              font=("맑은 고딕", 10, "bold"), bg="#f4f6f9", padx=10, pady=8)
+        outer.pack(fill="both", expand=True, padx=18, pady=6)
+        topbar = tk.Frame(outer, bg="#f4f6f9")
+        topbar.pack(fill="x", pady=(0, 4))
+        self.summary_var = tk.StringVar(value="파일을 열면 등급별 분류 결과가 표시됩니다.")
+        tk.Label(topbar, textvariable=self.summary_var, font=("맑은 고딕", 9, "bold"),
+                 fg="#334155", bg="#f4f6f9").pack(side="left")
+        tk.Button(topbar, text="전체 선택/해제", command=self._toggle_all,
+                  bg="#e2e8f0", relief="flat", font=("맑은 고딕", 8), padx=6).pack(side="right")
 
-        self.col_canvas = tk.Canvas(self.col_frame_outer, bg="#f4f6f9", highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.col_frame_outer, orient="vertical",
-                                  command=self.col_canvas.yview)
-        self.col_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        self.col_canvas.pack(side="left", fill="both", expand=True)
-
-        self.col_frame = tk.Frame(self.col_canvas, bg="#f4f6f9")
-        self.col_canvas.create_window((0, 0), window=self.col_frame, anchor="nw")
-        self.col_frame.bind("<Configure>",
-            lambda e: self.col_canvas.configure(scrollregion=self.col_canvas.bbox("all")))
-
-        self.placeholder = tk.Label(self.col_frame,
-                                    text="파일을 열면 컬럼 목록이 표시됩니다.",
-                                    font=("맑은 고딕", 10), fg="#94a3b8", bg="#f4f6f9")
+        self.canvas = tk.Canvas(outer, bg="#ffffff", highlightthickness=1,
+                                highlightbackground="#e2e8f0")
+        sb = ttk.Scrollbar(outer, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.list_frame = tk.Frame(self.canvas, bg="#ffffff")
+        self.canvas.create_window((0, 0), window=self.list_frame, anchor="nw")
+        self.list_frame.bind("<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.placeholder = tk.Label(self.list_frame, text="아직 불러온 파일이 없습니다.",
+                                    font=("맑은 고딕", 10), fg="#94a3b8", bg="#ffffff")
         self.placeholder.pack(pady=30)
 
-        # 실행 버튼 + 상태
-        btm = tk.Frame(self, bg="#f4f6f9")
-        btm.pack(fill="x", padx=18, pady=(4, 14))
+        # ③ 오탐 가능성 안내 (추정·근거) — 유형별 한 줄씩
+        nf = tk.LabelFrame(self, text=" 오탐 가능성 안내 (추정·근거) ",
+                           font=("맑은 고딕", 9, "bold"), bg="#fffbeb",
+                           fg="#92400e", padx=10, pady=6)
+        nf.pack(fill="x", padx=18, pady=(0, 6))
+        self.notice_inner = tk.Frame(nf, bg="#fffbeb")
+        self.notice_inner.pack(fill="x")
+        tk.Label(self.notice_inner, text="파일을 열면 표시됩니다.", font=("맑은 고딕", 8),
+                 fg="#a16207", bg="#fffbeb", anchor="w").pack(anchor="w")
 
+        # ④ 확인 체크 (자체 줄)
+        ackrow = tk.Frame(self, bg="#eef2f7")
+        ackrow.pack(fill="x", padx=18)
+        tk.Checkbutton(ackrow, text="  분류 결과와 오탐 가능성을 확인했습니다 (체크해야 실행 가능)",
+                       variable=self.ack_var, command=self._gate,
+                       font=("맑은 고딕", 9, "bold"), fg="#334155",
+                       bg="#eef2f7", activebackground="#eef2f7").pack(side="left", pady=4)
+
+        # ⑤ 상태 + 실행 버튼 (자체 줄)
+        btm = tk.Frame(self, bg="#f4f6f9")
+        btm.pack(fill="x", padx=18, pady=(4, 12))
         self.status_var = tk.StringVar(value="파일을 선택해 주세요.")
         tk.Label(btm, textvariable=self.status_var, font=("맑은 고딕", 9),
                  fg="#64748b", bg="#f4f6f9").pack(side="left")
-        tk.Button(btm, text="  마스킹 실행 및 저장  ", command=self._run_masking,
-                  bg="#16a34a", fg="white", font=("맑은 고딕", 11, "bold"),
-                  relief="flat", padx=14, pady=6).pack(side="right")
+        self.run_btn = tk.Button(btm, text="   마스킹 실행 및 저장   ", command=self._run_masking,
+                                 bg="#16a34a", fg="white", font=("맑은 고딕", 11, "bold"),
+                                 relief="flat", padx=18, pady=8, state="disabled",
+                                 disabledforeground="#dcfce7")
+        self.run_btn.pack(side="right")
+
+    def _gate(self):
+        self.run_btn.config(state="normal" if self.ack_var.get() else "disabled")
+
+    # ── N2SF 기준·근거 팝업 (설명가능성/신뢰성, 외부 링크 없음) ──
+    def _show_sources(self):
+        win = tk.Toplevel(self)
+        win.title("N2SF 기준 · 근거")
+        win.geometry("640x540")
+        win.configure(bg="#ffffff")
+
+        tk.Label(win, text="(참고) 국가 망 보안체계(N2SF) 등급 기준",
+                 font=("맑은 고딕", 13, "bold"), fg="#1e3a5f", bg="#ffffff").pack(pady=(16, 2))
+        tk.Label(win, text="※ 이 도구의 핵심은 '마스킹'이며, N2SF는 향후 전환 대비 참고 분류입니다.",
+                 font=("맑은 고딕", 8), fg="#94a3b8", bg="#ffffff").pack()
+        tk.Label(win, text=STANDARD_NAME, font=("맑은 고딕", 9), fg="#475569",
+                 bg="#ffffff").pack(pady=(8, 0))
+        tk.Label(win, text=STANDARD_TIMELINE, font=("맑은 고딕", 9), fg="#64748b",
+                 bg="#ffffff").pack(pady=(0, 10))
+
+        for g in ("C", "S", "O"):
+            row = tk.Frame(win, bg="#ffffff")
+            row.pack(fill="x", padx=24, pady=3)
+            tk.Label(row, text=f" {g} ", bg=GRADE_COLOR[g], fg="white",
+                     font=("맑은 고딕", 10, "bold"), width=3).pack(side="left")
+            tk.Label(row, text=f" {GRADE_LABEL[g]} · {GRADE_POLICY[g]}",
+                     font=("맑은 고딕", 9, "bold"), bg="#ffffff", anchor="w").pack(side="left")
+            tk.Label(row, text=GRADE_DEF[g], font=("맑은 고딕", 8), fg="#64748b",
+                     bg="#ffffff", anchor="w", wraplength=560, justify="left").pack(
+                side="left", padx=6)
+
+        tk.Label(win, text="정식 근거 (원문)", font=("맑은 고딕", 10, "bold"),
+                 fg="#1e3a5f", bg="#ffffff").pack(pady=(14, 4))
+        tk.Label(win, text=f"「{STANDARD_NAME}」\n{GUIDE_NOTE}",
+                 font=("맑은 고딕", 9), fg="#475569", bg="#ffffff",
+                 justify="center").pack()
+
+        tk.Label(win, text="참고 동향정보 (정식 공문 아님)", font=("맑은 고딕", 10, "bold"),
+                 fg="#64748b", bg="#ffffff").pack(pady=(14, 4))
+        for note in TREND_NOTES:
+            tk.Label(win, text="• " + note, font=("맑은 고딕", 8), fg="#64748b",
+                     bg="#ffffff", anchor="w", wraplength=580,
+                     justify="left").pack(fill="x", padx=24)
+
+        tk.Label(win, text="※ 전국 일괄 시행일은 단일 날짜로 공표되지 않았으며 단계적으로 적용됩니다.",
+                 font=("맑은 고딕", 8), fg="#94a3b8", bg="#ffffff",
+                 wraplength=580).pack(pady=(14, 6), padx=24)
+        tk.Button(win, text="닫기", command=win.destroy, bg="#e2e8f0",
+                  relief="flat", padx=16, pady=4).pack(pady=8)
 
     # ── 파일 열기 ─────────────────────────────────────────────
-
     def _open_file(self):
         path = filedialog.askopenfilename(
             title="엑셀 파일 선택",
-            filetypes=[("Excel 파일", "*.xlsx *.xls"), ("모든 파일", "*.*")])
+            filetypes=[("Excel 파일", "*.xlsx"), ("모든 파일", "*.*")])
         if not path:
             return
         try:
-            self.df = pd.read_excel(path)
+            self.table = read_table(path)
             self.filepath.set(path)
-            self.status_var.set(f"✅ {len(self.df)}행 × {len(self.df.columns)}열 로드 완료")
-            self._build_column_ui()
+            self.status_var.set(
+                f"✅ {self.table.nrows}행 × {self.table.ncols}열 로드 완료 · 분류 중…")
+            self.update()
+            self._analyze_and_render()
         except Exception as e:
-            messagebox.showerror("오류", f"파일을 읽을 수 없습니다.\n{e}")
+            messagebox.showerror("오류", f"파일을 읽을 수 없습니다.\n(.xls는 .xlsx로 저장해 주세요)\n{e}")
 
-    # ── 컬럼 UI 빌드 ──────────────────────────────────────────
-
-    def _build_column_ui(self):
-        for w in self.col_frame.winfo_children():
+    # ── 분석 + 목록 렌더링 ────────────────────────────────────
+    def _analyze_and_render(self):
+        for w in self.list_frame.winfo_children():
             w.destroy()
-        self.col_vars.clear()
+        self.col_meta.clear()
         self.col_checks.clear()
 
-        types = ["없음", "이름", "전화번호", "이메일", "주민등록번호", "주소"]
-
-        # 헤더 행
-        tk.Label(self.col_frame, text="선택", width=4, font=("맑은 고딕", 9, "bold"),
-                 bg="#e2e8f0").grid(row=0, column=0, padx=4, pady=2, sticky="w")
-        tk.Label(self.col_frame, text="컬럼명", width=22, font=("맑은 고딕", 9, "bold"),
-                 bg="#e2e8f0", anchor="w").grid(row=0, column=1, padx=4, pady=2, sticky="w")
-        tk.Label(self.col_frame, text="미리보기 (첫 3개)", width=30, font=("맑은 고딕", 9, "bold"),
-                 bg="#e2e8f0", anchor="w").grid(row=0, column=2, padx=4, pady=2, sticky="w")
-        tk.Label(self.col_frame, text="마스킹 유형", width=16, font=("맑은 고딕", 9, "bold"),
-                 bg="#e2e8f0").grid(row=0, column=3, padx=4, pady=2, sticky="w")
-
-        for i, col in enumerate(self.df.columns):
-            detected = detect_column_type(self.df[col])
-            check_var = tk.BooleanVar(value=(detected != "없음"))
-            type_var  = tk.StringVar(value=detected)
-
+        c_cnt = s_cnt = 0
+        notice = {}   # 유형 → (최고 오탐%, 근거)
+        for i, col in enumerate(self.table.headers):
+            values = self.table.column(col)
+            name_col = is_name_column(col, values)
+            grade, counts, whys, before, after = analyze_column(values, name_col)
+            self.col_meta[col] = (grade, counts, before, after, name_col)
+            if grade == "C":
+                c_cnt += 1
+            elif grade == "S":
+                s_cnt += 1
+            # 컬럼 오탐 추정 + 근거 집계
+            col_risk = 0
+            for t in counts:
+                pct, reason = max((risk_of(t, w) for w in (whys.get(t) or {None})),
+                                  key=lambda x: x[0])
+                col_risk = max(col_risk, pct)
+                if t not in notice or pct > notice[t][0]:
+                    notice[t] = (pct, reason)
+            check_var = tk.BooleanVar(value=(grade != "O"))
             self.col_checks[col] = check_var
-            self.col_vars[col]   = type_var
+            self._render_row(i, col, grade, counts, before, after, check_var, col_risk)
 
-            bg = "#f0fdf4" if detected != "없음" else "#ffffff"
-            row = i + 1
+        total = self.table.ncols
+        self.summary_var.set(
+            f"총 {total}열 — 기밀(C) {c_cnt} · 민감(S) {s_cnt} · 공개(O) {total - c_cnt - s_cnt}")
+        for w in self.notice_inner.winfo_children():
+            w.destroy()
+        if notice:
+            for t, (p, r) in sorted(notice.items(), key=lambda kv: -kv[1][0]):
+                line = tk.Frame(self.notice_inner, bg="#fffbeb")
+                line.pack(fill="x", anchor="w", pady=1)
+                rbg, rfg = _risk_style(p)
+                tk.Label(line, text=f"오탐 {p}%", bg=rbg, fg=rfg, width=8,
+                         font=("맑은 고딕", 8, "bold")).pack(side="left", padx=(0, 8))
+                tk.Label(line, text=f"{t} — {r}", bg="#fffbeb", fg="#7c2d12",
+                         font=("맑은 고딕", 8), anchor="w", justify="left",
+                         wraplength=740).pack(side="left", fill="x")
+        else:
+            tk.Label(self.notice_inner, text="탐지된 민감정보가 없습니다.",
+                     font=("맑은 고딕", 8), fg="#a16207", bg="#fffbeb",
+                     anchor="w").pack(anchor="w")
+        # 새 파일마다 확인 절차 재요구
+        self.ack_var.set(False)
+        self._gate()
+        self.status_var.set("✅ 분류 완료 — 아래 확인 체크 후 [마스킹 실행 및 저장]")
 
-            tk.Checkbutton(self.col_frame, variable=check_var, bg=bg).grid(
-                row=row, column=0, padx=4, sticky="w")
-            tk.Label(self.col_frame, text=col, width=22, anchor="w",
-                     font=("맑은 고딕", 9), bg=bg).grid(
-                row=row, column=1, padx=4, pady=1, sticky="w")
+    def _render_row(self, i, col, grade, counts, before, after, check_var, risk):
+        bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
+        row = tk.Frame(self.list_frame, bg=bg)
+        row.pack(fill="x", padx=2, pady=1)
+        tk.Checkbutton(row, variable=check_var, bg=bg).pack(side="left", padx=(4, 2))
+        tk.Label(row, text=f" {grade} ", bg=GRADE_COLOR[grade], fg="white",
+                 font=("맑은 고딕", 9, "bold"), width=3).pack(side="left", padx=4)
+        tk.Label(row, text=str(col), width=14, anchor="w", font=("맑은 고딕", 9, "bold"),
+                 bg=bg).pack(side="left", padx=2)
+        types = ", ".join(f"{t}×{n}" for t, n in counts.items()) if counts else "—"
+        tk.Label(row, text=types, width=22, anchor="w", font=("맑은 고딕", 8),
+                 fg="#475569", bg=bg).pack(side="left", padx=2)
+        # 오탐 추정 배지
+        if risk:
+            rbg, rfg = _risk_style(risk)
+            tk.Label(row, text=f"오탐 {risk}%", bg=rbg, fg=rfg,
+                     font=("맑은 고딕", 8, "bold"), width=8).pack(side="left", padx=2)
+        else:
+            tk.Label(row, text="—", width=8, font=("맑은 고딕", 8),
+                     fg="#cbd5e1", bg=bg).pack(side="left", padx=2)
+        ex = f"{before[:12]} → {after[:16]}" if before else "(마스킹 없음)"
+        tk.Label(row, text=ex, anchor="w", font=("맑은 고딕", 8),
+                 fg="#16a34a" if before else "#94a3b8", bg=bg).pack(side="left", padx=2)
 
-            preview = ", ".join(str(v) for v in self.df[col].dropna().head(3).tolist())
-            preview = preview[:35] + "…" if len(preview) > 35 else preview
-            tk.Label(self.col_frame, text=preview, width=30, anchor="w",
-                     font=("맑은 고딕", 9), fg="#475569", bg=bg).grid(
-                row=row, column=2, padx=4, pady=1, sticky="w")
-
-            ttk.Combobox(self.col_frame, textvariable=type_var, values=types,
-                         width=14, state="readonly").grid(
-                row=row, column=3, padx=4, pady=1)
+    def _toggle_all(self):
+        if not self.col_checks:
+            return
+        new = not all(v.get() for v in self.col_checks.values())
+        for v in self.col_checks.values():
+            v.set(new)
 
     # ── 마스킹 실행 ───────────────────────────────────────────
-
     def _run_masking(self):
-        if self.df is None:
+        if self.table is None:
             messagebox.showwarning("알림", "먼저 파일을 선택해 주세요.")
             return
-
-        selected = [(col, self.col_vars[col].get())
-                    for col, chk in self.col_checks.items()
-                    if chk.get() and self.col_vars[col].get() != "없음"]
-
-        if not selected:
+        targets = [c for c, v in self.col_checks.items() if v.get()]
+        if not targets:
             messagebox.showwarning("알림", "마스킹할 컬럼을 하나 이상 선택해 주세요.")
             return
-
-        # 저장 경로
-        src = self.filepath.get()
-        base, ext = os.path.splitext(src)
-        default_save = base + "_마스킹" + ext
+        base, _ = os.path.splitext(self.filepath.get())
         save_path = filedialog.asksaveasfilename(
             title="저장 위치 선택",
-            initialfile=os.path.basename(default_save),
-            defaultextension=".xlsx",
-            filetypes=[("Excel 파일", "*.xlsx")])
+            initialfile=os.path.basename(base + "_마스킹.xlsx"),
+            defaultextension=".xlsx", filetypes=[("Excel 파일", "*.xlsx")])
         if not save_path:
             return
-
         self.status_var.set("⏳ 마스킹 처리 중…")
         self.update()
+        threading.Thread(target=self._worker, args=(targets, save_path), daemon=True).start()
 
-        def worker():
-            try:
-                result = self.df.copy()
-                for col, mtype in selected:
-                    fn = MASK_FUNCS.get(mtype)
-                    if fn:
-                        result[col] = result[col].apply(
-                            lambda v: fn(v) if pd.notna(v) else v)
+    def _worker(self, targets, save_path):
+        try:
+            name_cols = {c: self.col_meta[c][4] for c in targets}
+            result, report_rows, ref_rows = mask_dataframe(self.table, targets, name_cols)
+            write_workbook(save_path, result, report_rows, ref_rows)
 
-                result.to_excel(save_path, index=False)
-                self.after(0, lambda: (
-                    self.status_var.set(f"✅ 저장 완료 → {os.path.basename(save_path)}"),
-                    messagebox.showinfo("완료",
-                        f"마스킹이 완료되었습니다!\n\n저장 위치:\n{save_path}")
-                ))
-            except Exception as e:
-                self.after(0, lambda: (
-                    self.status_var.set("❌ 오류 발생"),
-                    messagebox.showerror("오류", f"처리 중 오류가 발생했습니다.\n{e}")
-                ))
-
-        threading.Thread(target=worker, daemon=True).start()
+            total = count_detections(report_rows)
+            self.after(0, lambda: (
+                self.status_var.set(f"✅ 저장 완료 → {os.path.basename(save_path)}"),
+                messagebox.showinfo("완료",
+                    f"마스킹이 완료되었습니다!\n\n"
+                    f"· 마스킹 건수: 총 {total}건\n"
+                    f"· 시트: [마스킹결과] + [분류리포트] + [N2SF근거]\n\n"
+                    f"저장 위치:\n{save_path}")))
+        except Exception as e:
+            self.after(0, lambda: (
+                self.status_var.set("❌ 오류 발생"),
+                messagebox.showerror("오류", f"처리 중 오류가 발생했습니다.\n{e}")))
 
 
 if __name__ == "__main__":
-    app = MaskingApp()
-    app.mainloop()
+    MaskingApp().mainloop()

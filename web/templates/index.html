@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>엑셀 정보 마스킹</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--blue:#2563eb;--green:#16a34a;--amber:#f59e0b}
+  body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;color:var(--ink);
+       background:#fafbfc;min-height:100vh;display:flex;flex-direction:column}
+  header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px}
+  header .brand{font-weight:800;font-size:1rem}
+  header .help{background:none;border:none;color:var(--mut);font-size:.9rem;cursor:pointer;font-weight:600}
+  header .help:hover{color:var(--blue)}
+  main{flex:1;display:flex;flex-direction:column;align-items:center;padding:20px 16px 120px;width:100%}
+  .stage{width:100%;max-width:900px;text-align:center}
+  .stage h1{font-size:1.8rem;font-weight:800;letter-spacing:-.5px}
+  .stage .sub{color:var(--mut);margin-top:8px;font-size:.96rem}
+  .userin{margin-top:18px;width:320px;max-width:90%;padding:11px 14px;border:1px solid #cbd5e1;
+          border-radius:10px;font-size:.95rem;text-align:center;outline:none}
+  .userin:focus{border-color:var(--blue)}
+  .drop{margin-top:16px;border:2.5px dashed #cbd5e1;border-radius:18px;padding:46px 24px;
+        cursor:pointer;transition:.15s;background:#fff}
+  .drop:hover,.drop.over{border-color:var(--blue);background:#f3f8ff}
+  .drop .big{font-size:1.1rem;font-weight:700}.drop .big b{color:var(--blue)}
+  .drop .small{color:var(--mut);font-size:.85rem;margin-top:8px}
+  .tiny{color:#94a3b8;font-size:.8rem;margin-top:14px}
+  .msg{margin-top:14px}
+  .note{background:#eff6ff;border-left:4px solid var(--blue);padding:9px 13px;border-radius:0 8px 8px 0;
+        font-size:.85rem;text-align:left}
+  .err{background:#fef2f2;border-left:4px solid #dc2626;color:#991b1b;padding:9px 13px;
+       border-radius:0 8px 8px 0;font-size:.85rem;text-align:left}
+  /* 파일 카드 */
+  .files{margin-top:22px;display:flex;flex-direction:column;gap:14px}
+  .filecard{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+            box-shadow:0 3px 12px rgba(0,0,0,.05);text-align:left}
+  .fhead{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#f8fafc;border-bottom:1px solid var(--line)}
+  .fname{font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fsum{color:var(--mut);font-size:.82rem;white-space:nowrap}
+  .ficon{background:none;border:none;cursor:pointer;color:var(--mut);font-size:.78rem;font-weight:600}
+  .ficon:hover{color:var(--blue)}
+  .frev{background:#fffbeb;border-bottom:1px solid #fde68a;color:#92400e;font-size:.82rem;padding:8px 16px}
+  table{width:100%;border-collapse:collapse;font-size:.88rem}
+  th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left}
+  th{background:#fff;color:var(--mut);font-size:.76rem}
+  .pill{color:#fff;font-weight:700;padding:1px 8px;border-radius:6px;font-size:.76rem}
+  .C{background:#dc2626}.S{background:#f59e0b}.O{background:#94a3b8}
+  .risk{font-weight:700;font-size:.74rem;padding:1px 7px;border-radius:6px;white-space:nowrap}
+  .r-low{background:#dcfce7;color:#166534}
+  .r-mid{background:#fef3c7;color:#92400e}
+  .r-high{background:#fee2e2;color:#b91c1c}
+  .ex{color:var(--green);font-size:.8rem}
+  .muted{color:var(--mut)}
+  .wrapbox{max-height:34vh;overflow:auto}
+  /* 하단 고정 액션 바 */
+  .bottom{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+          box-shadow:0 -3px 14px rgba(0,0,0,.06);padding:12px 20px;display:none;flex-direction:column;gap:8px;z-index:30}
+  .bottom.show{display:flex}
+  .bottominner{max-width:900px;margin:0 auto;width:100%}
+  .gnotice{background:#fffbeb;border-left:4px solid var(--amber);padding:9px 13px;border-radius:0 8px 8px 0;
+           font-size:.83rem;text-align:left;color:#92400e}
+  .gnotice b{color:#b45309}
+  .ack{display:flex;align-items:center;gap:8px;font-size:.88rem;margin-top:6px;cursor:pointer}
+  .actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:6px}
+  .actions .m{color:var(--mut);font-size:.85rem;margin-right:auto;text-align:left}
+  .btn{border:none;border-radius:10px;padding:11px 24px;font-size:1rem;font-weight:800;cursor:pointer;color:#fff;background:var(--green)}
+  .btn:hover{background:#15803d}.btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-ghost{border:1px solid #cbd5e1;background:#fff;color:#475569;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer}
+  .btn-ghost:hover{background:#f1f5f9}
+  .hidden{display:none}
+  /* 사용법 오버레이 */
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:flex-start;
+           justify-content:center;padding:40px 16px;overflow:auto;z-index:50}
+  .overlay.show{display:flex}
+  .sheet{background:#fff;border-radius:16px;max-width:720px;width:100%;padding:30px 34px}
+  .sheet h2{font-size:1.4rem;margin-bottom:4px}.sheet h3{margin:20px 0 8px;color:var(--blue);font-size:1.05rem}
+  .sheet ol{padding-left:20px}.sheet li{margin:7px 0}.sheet .small{font-size:.85rem}
+  .sheet table{margin-top:8px}.sheet .close{float:right;background:#e2e8f0;border:none;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700}
+  footer{text-align:center;color:#94a3b8;font-size:.78rem;padding:14px}
+</style>
+</head>
+<body>
+  <header>
+    <span class="brand">🔒 엑셀 정보 마스킹</span>
+    <button class="help" onclick="openHelp()">📖 사용법</button>
+  </header>
+
+  <main>
+    <div class="stage">
+      <h1>엑셀의 민감정보, 한 번에 가립니다.</h1>
+      <p class="sub">파일을 올리면 이름·전화·주민번호 등을 자동으로 찾아 마스킹합니다. 여러 개도 한꺼번에.</p>
+
+      <input id="user" type="text" placeholder="이름 또는 사번 (사용 이력 기록용)" class="userin">
+
+      <div id="drop" class="drop">
+        <div class="big">📄 엑셀 파일을 끌어놓거나 <b>클릭하여 선택</b> (여러 개 가능)</div>
+        <div class="small">.xlsx / .xls · 파일당 최대 50MB</div>
+      </div>
+      <input id="file" type="file" accept=".xlsx,.xls" multiple class="hidden">
+      <div id="uploadMsg" class="msg"></div>
+      <p class="tiny">처음이세요? 오른쪽 위 <b>📖 사용법</b>을 눌러 보세요.</p>
+
+      <div id="files" class="files"></div>
+    </div>
+  </main>
+
+  <!-- 하단 액션 바 -->
+  <div id="bottom" class="bottom">
+    <div class="bottominner">
+      <div id="gnotice" class="gnotice"></div>
+      <div class="actions">
+        <span id="maskMsg" class="m"></span>
+        <label class="ack"><input type="checkbox" id="ack"> 분류 결과와 오탐 가능성을 확인했습니다</label>
+        <button id="reset" class="btn-ghost">초기화</button>
+        <button id="run" class="btn" disabled>마스킹 다운로드</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>파일은 처리 즉시 서버에서 삭제됩니다 · N2SF 등급은 참고 분류, 핵심은 마스킹</footer>
+
+  <!-- 사용법 -->
+  <div id="help" class="overlay" onclick="if(event.target===this)closeHelp()">
+    <div class="sheet">
+      <button class="close" onclick="closeHelp()">닫기 ✕</button>
+      <h2>📖 사용법</h2>
+      <p class="muted small">올리기 → 확인 → 다운로드. 여러 파일도 한 번에 처리됩니다.</p>
+      <h3>① 올리기 → ② 확인 → ③ 다운로드</h3>
+      <ol>
+        <li><b>엑셀(.xlsx) 파일을 올립니다</b>(여러 개 가능). 파일마다 카드로 분류 결과가 나옵니다.</li>
+        <li>컬럼별 <b>등급(C/S/O)</b>·<b>오탐 추정 %</b>·“원본 → 마스킹” 미리보기를 확인하고 체크를 조정합니다.</li>
+        <li>하단 <b>[분류 결과와 오탐 가능성을 확인했습니다]</b>에 체크하면 버튼이 켜집니다 →
+            <b>[마스킹 다운로드]</b>(1개=엑셀, 여러 개=ZIP). <b>[초기화]</b>로 처음부터 다시.</li>
+      </ol>
+      <h3>⚠ 오탐 가능성은 “확률 + 근거”로 알려드립니다</h3>
+      <p class="small">각 탐지에 <b>추정 오탐 %</b>를 색으로 표시합니다 —
+        <span class="risk r-low">낮음</span> <span class="risk r-mid">보통</span>
+        <span class="risk r-high">높음</span>. 규칙 강도 기반 추정치이며, 왜 그 수치인지
+        <b>근거</b>를 하단 패널에 함께 보여줍니다(사람이 판단·소명할 수 있도록).</p>
+      <ul class="small" style="padding-left:20px">
+        <li><b>낮음</b>(주민·카드·면허·전화·이메일·계좌·차량): 검증 로직이 있어 오탐이 드뭅니다.</li>
+        <li><b>보통~높음</b>(이름·주소·여권·생년월일): 자동 판정 특성상 누락·오탐이 생길 수 있습니다.</li>
+        <li>다운로드 전 <b>확인 체크가 필수</b>입니다(검토 없이 받을 수 없게).</li>
+      </ul>
+      <h3>무엇이 어떻게 가려지나요?</h3>
+      <table>
+        <thead><tr><th>등급</th><th>대상(예)</th><th>처리</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill C">C</span></td><td>주민번호·카드·계좌·여권</td><td>완전 마스킹</td></tr>
+          <tr><td><span class="pill S">S</span></td><td>이름·전화·이메일·주소</td><td>부분 마스킹</td></tr>
+          <tr><td><span class="pill O">O</span></td><td>부서명·일반 텍스트·코드</td><td>그대로 유지</td></tr>
+        </tbody>
+      </table>
+      <h3>안심하세요</h3>
+      <ul class="small" style="padding-left:20px">
+        <li>올린 파일은 <b>완료 즉시 서버에서 삭제</b>되고, 외부 통신이 없습니다(사내망/폐쇄망 동작).</li>
+        <li>사용 이력(누가·언제·어떤 파일)은 기록되지만 <b>셀 내용(개인정보)은 기록하지 않습니다.</b></li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+const drop=$("drop"), fileInput=$("file"), userEl=$("user");
+let FILES=[];   // {token, filename, columns, c, s, total}
+
+userEl.value=localStorage.getItem("maskUser")||"";
+userEl.addEventListener("change",()=>localStorage.setItem("maskUser",userEl.value));
+function openHelp(){$("help").classList.add("show")}
+function closeHelp(){$("help").classList.remove("show")}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeHelp()});
+
+drop.addEventListener("click",()=>fileInput.click());
+drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over")});
+drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over");
+  if(e.dataTransfer.files.length)uploadMany(e.dataTransfer.files)});
+fileInput.addEventListener("change",()=>{if(fileInput.files.length)uploadMany(fileInput.files);fileInput.value=""});
+
+function setMsg(el,html,cls){el.innerHTML=html?`<div class="${cls}">${html}</div>`:""}
+
+async function uploadMany(list){
+  setMsg($("uploadMsg"),`⏳ ${list.length}개 파일 분석 중…`,"note");
+  let added=0, errs=[];
+  for(const file of list){
+    try{
+      const fd=new FormData(); fd.append("file",file); fd.append("user",userEl.value);
+      const res=await fetch("/analyze",{method:"POST",body:fd});
+      const data=await res.json();
+      if(!res.ok){errs.push(`${file.name}: ${data.error}`);continue}
+      FILES.push(data); renderCard(data); added++;
+    }catch(e){errs.push(`${file.name}: ${e}`)}
+  }
+  setMsg($("uploadMsg"),
+    (added?`✅ ${added}개 분석 완료`:"") + (errs.length?` · ❌ ${errs.join(" / ")}`:""),
+    errs.length?"err":"note");
+  refreshBottom();
+}
+
+function badge(p){const cls=p>=30?"r-high":p>=15?"r-mid":"r-low";return `<span class="risk ${cls}">오탐 ${p}%</span>`}
+
+function renderCard(d){
+  const card=document.createElement("div");
+  card.className="filecard"; card.dataset.token=d.token;
+  let rows="";
+  d.columns.forEach(c=>{
+    const ex=c.before?`${esc(c.before).slice(0,20)} → <span class="ex">${esc(c.after).slice(0,24)}</span>`
+                     :'<span class="muted">(없음)</span>';
+    const rk=c.risk?badge(c.risk):'<span class="muted">—</span>';
+    rows+=`<tr>
+      <td><input type="checkbox" class="cb" data-col="${esc(c.name)}" ${c.suggest?"checked":""}></td>
+      <td><span class="pill ${c.grade}">${c.grade}</span></td>
+      <td><b>${esc(c.name)}</b></td>
+      <td class="muted">${esc(c.types_text||"—")}</td>
+      <td>${rk}</td>
+      <td>${ex}</td></tr>`;
+  });
+  card.innerHTML=`
+    <div class="fhead">
+      <span class="fname">📄 ${esc(d.filename)}</span>
+      <span class="fsum">${d.rows}행 · C ${d.c}·S ${d.s}·O ${d.total-d.c-d.s}</span>
+      <button class="ficon" data-act="toggle">전체선택/해제</button>
+      <button class="ficon" data-act="remove">✕ 제거</button>
+    </div>
+    <div class="wrapbox"><table>
+      <thead><tr><th style="width:40px">선택</th><th style="width:44px">등급</th>
+        <th>컬럼명</th><th>탐지 유형</th><th style="width:78px">오탐(추정)</th><th>원본 → 마스킹</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  card.querySelector('[data-act="toggle"]').addEventListener("click",()=>{
+    const cbs=[...card.querySelectorAll(".cb")], on=cbs.every(c=>c.checked);
+    cbs.forEach(c=>c.checked=!on);
+  });
+  card.querySelector('[data-act="remove"]').addEventListener("click",()=>removeFile(d.token));
+  $("files").appendChild(card);
+}
+
+async function removeFile(token){
+  FILES=FILES.filter(f=>f.token!==token);
+  const card=document.querySelector(`.filecard[data-token="${token}"]`);
+  if(card)card.remove();
+  fetch("/discard",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({tokens:[token]})}).catch(()=>{});
+  refreshBottom();
+}
+
+function refreshBottom(){
+  const has=FILES.length>0;
+  $("bottom").classList.toggle("show",has);
+  if(!has)return;
+  // 유형별 '최고 오탐 추정 + 근거' 모으기 (설명가능성)
+  const map=new Map();
+  FILES.forEach(f=>f.columns.forEach(c=>(c.risk_items||[]).forEach(r=>{
+    const cur=map.get(r.type);
+    if(!cur||r.pct>cur.pct)map.set(r.type,r);
+  })));
+  const items=[...map.values()].sort((a,b)=>b.pct-a.pct);
+  if(items.length){
+    $("gnotice").innerHTML=
+      `<b>오탐 가능성 안내 (추정치·근거)</b> — 자동 분류라 일부 오탐/누락이 있을 수 있어, 왜 그렇게 추정했는지 근거를 함께 드립니다:<br>`+
+      items.map(r=>`${badge(r.pct)} <b>${esc(r.type)}</b> — ${esc(r.reason)}`).join("<br>");
+  }else{
+    $("gnotice").innerHTML="탐지된 민감정보가 없습니다. 그래도 결과를 확인한 뒤 진행하세요.";
+  }
+  gate();
+}
+function gate(){ $("run").disabled = !$("ack").checked; }   // 체크해야 다운로드(올바른 절차)
+$("ack").addEventListener("change",gate);
+
+$("reset").addEventListener("click",()=>{
+  const tokens=FILES.map(f=>f.token);
+  if(tokens.length)fetch("/discard",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({tokens})}).catch(()=>{});
+  FILES=[]; $("files").innerHTML=""; $("ack").checked=false;
+  setMsg($("uploadMsg"),"","");  $("maskMsg").textContent="";
+  refreshBottom();
+});
+
+$("run").addEventListener("click",async()=>{
+  const items=[];
+  FILES.forEach(f=>{
+    const card=document.querySelector(`.filecard[data-token="${f.token}"]`);
+    const selected=[...card.querySelectorAll(".cb:checked")].map(c=>c.dataset.col);
+    if(selected.length)items.push({token:f.token,filename:f.filename,selected});
+  });
+  if(!items.length){$("maskMsg").textContent="마스킹할 컬럼을 1개 이상 선택하세요.";return}
+  $("run").disabled=true; $("maskMsg").innerHTML="⏳ 마스킹 처리 중…";
+  try{
+    const res=await fetch("/mask",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user:userEl.value,items})});
+    if(!res.ok){const d=await res.json();$("maskMsg").textContent="❌ "+d.error;gate();return}
+    const blob=await res.blob(), url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url;
+    a.download = items.length===1
+      ? (items[0].filename||"결과").replace(/\.[^.]+$/,"")+"_마스킹.xlsx"
+      : "마스킹결과.zip";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    $("maskMsg").innerHTML=`✅ 다운로드 완료 (${items.length}개)`;
+  }catch(e){$("maskMsg").textContent="❌ 처리 실패: "+e}
+  finally{gate()}
+});
+
+function esc(s){return String(s).replace(/[&<>"']/g,m=>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+</script>
+</body>
+</html>

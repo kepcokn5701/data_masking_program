@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N2SF 정보 분류·마스킹 교육자료</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', '맑은 고딕', -apple-system, sans-serif;
+    background: #f1f5f9; color: #1e293b; line-height: 1.75; padding: 24px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .card {
+    background: #fff; border-radius: 14px; padding: 36px 44px; margin-bottom: 22px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.06);
+  }
+  .hero {
+    background: linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);
+    color: #fff; text-align: center;
+  }
+  .hero h1 { font-size: 2rem; margin-bottom: 8px; }
+  .hero p { color: #cfe0f5; }
+  .badge {
+    display:inline-block; padding: 2px 12px; border-radius: 20px; font-size: .8rem;
+    font-weight: 700; color:#fff; margin-right:6px;
+  }
+  h2 { color:#1e3a5f; font-size:1.4rem; margin-bottom:14px; padding-bottom:8px;
+       border-bottom:3px solid #e2e8f0; }
+  h3 { color:#2563eb; margin:18px 0 8px; font-size:1.1rem; }
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:.92rem; }
+  th,td { border:1px solid #e2e8f0; padding:9px 12px; text-align:left; vertical-align:top; }
+  th { background:#1e3a5f; color:#fff; }
+  tr:nth-child(even) td { background:#f8fafc; }
+  .C { background:#dc2626; } .S { background:#f59e0b; } .O { background:#94a3b8; }
+  .pill { color:#fff; font-weight:700; padding:1px 9px; border-radius:6px; font-size:.82rem; }
+  code { background:#e2e8f0; padding:2px 7px; border-radius:4px;
+         font-family:Consolas,monospace; font-size:.88rem; }
+  .arrow { color:#16a34a; font-weight:700; }
+  .note { background:#fef3c7; border-left:4px solid #f59e0b; padding:12px 18px;
+          border-radius:0 8px 8px 0; margin:16px 0; }
+  .src { background:#eff6ff; border-left:4px solid #2563eb; padding:12px 18px;
+         border-radius:0 8px 8px 0; margin:16px 0; }
+  .src a { color:#1d4ed8; display:block; margin:4px 0; word-break:break-all; }
+  a { color:#2563eb; }
+  ul,ol { padding-left:22px; } li { margin:6px 0; }
+  .quiz { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px;
+          padding:16px 22px; margin:12px 0; }
+  .quiz summary { cursor:pointer; font-weight:700; color:#15803d; }
+  .foot { text-align:center; color:#94a3b8; font-size:.85rem; padding:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card hero">
+    <h1>🔒 엑셀 민감정보 마스킹 교육자료</h1>
+    <p>핵심은 <strong>민감정보 마스킹</strong> · N2SF 등급 분류는 향후 전환 대비 <strong>참고 레이어</strong></p>
+  </div>
+
+  <div class="card" style="border-left:5px solid #2563eb;">
+    <p style="margin:0;"><strong>📌 이 도구의 본질은 "마스킹"입니다.</strong>
+    민감정보를 빠짐없이 가리는 것이 1차 목적이고,
+    아래 N2SF(국가 망 보안체계) C/S/O 등급 분류는
+    <strong>지금 당장의 의무 기준이 아니라</strong> 향후 망분리→N2SF 전환에 대비한
+    <strong>참고용 분류 체계</strong>입니다.</p>
+  </div>
+
+  <!-- 1. N2SF란 -->
+  <div class="card">
+    <h2>1. (참고) N2SF란 무엇인가</h2>
+    <p class="note" style="margin-top:0;">아래 내용은 <strong>향후 전환 대비 참고 자료</strong>입니다.
+    현재 도구의 동작 핵심은 4장 "마스킹"입니다.</p>
+    <p><strong>N2SF(National Network Security Framework, 국가 망 보안체계)</strong>는
+    국가정보원(NIS)이 발표한 신(新) 보안체계입니다. 기존 공공부문의 경직된
+    <strong>망분리(網分離)</strong> 정책 대신, AI·클라우드 등 신기술을 안전하게 활용할 수 있도록
+    <strong>데이터 중요도 기반의 다층 보안</strong>으로 전환하는 것이 핵심입니다.</p>
+
+    <h3>📅 배포·시행 경과 (검증된 사실만)</h3>
+    <table>
+      <tr><th>시점</th><th>내용</th></tr>
+      <tr><td>2025년 1월</td><td>「N2SF 보안가이드라인」 <strong>초안(Draft)</strong> 공개, 의견 수렴</td></tr>
+      <tr><td>2025년 9월 9일</td><td><strong>정식판 1.0</strong> 발표 — 사이버 서밋 코리아(CSK 2025, 서울 강남)</td></tr>
+      <tr><td>2025년 9월 30일</td><td>국정원 보도자료 및 국가사이버안보센터 홈페이지 정식 공개</td></tr>
+    </table>
+    <ul>
+      <li>보안 통제 세부 항목이 기존 <strong>약 170개 → 약 260개</strong>로 확대</li>
+      <li>제로트러스트·오버레이·CDS(망간자료전송) 등 반영</li>
+    </ul>
+
+    <div class="note">
+      ⚠️ <strong>시행일 관련 정직한 표기:</strong> 전국 기관 일괄 적용 "시행일"은 단일 날짜로
+      공표된 바 없으며, 기관별로 <strong>단계적</strong>으로 적용됩니다. 본 자료는 추측 날짜를 적지 않습니다.
+    </div>
+
+    <div class="src">
+      📄 <strong>정식 근거 (원문)</strong><br>
+      「국가 망 보안체계(N2SF) 보안가이드라인 1.0」 원문은
+      <strong>국정원(국가사이버안보센터) 홈페이지</strong>에서 확인할 수 있습니다.
+    </div>
+    <div class="note">
+      📌 <strong>참고 동향정보 (정식 공문 아님):</strong> 아래는 언론·보도자료로,
+      정식 지침이 아닌 참고용 동향입니다. 외부 링크는 업무망(폐쇄망)에서 열리지 않으므로 첨부하지 않습니다.
+      <ul style="margin:8px 0 0;">
+        <li>국정원 보도자료 — N2SF 보안가이드라인 정식판 공개 (2025-09)</li>
+        <li>ZDNet — 보안 통제 항목 약 170→260개 확대 보도 (2025-09-09)</li>
+        <li>한국일보 — N2SF 가이드라인 정식판 공개 보도 (2025-09-30)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2. C/S/O 등급 -->
+  <div class="card">
+    <h2>2. 데이터 3등급: C · S · O</h2>
+    <p>각 기관은 정보공개법 등 관련 법률이 규정한 <strong>비공개정보</strong>를 중요도에 따라
+    <strong>기밀(C)</strong> 또는 <strong>민감(S)</strong>으로, 그 외 모든 정보를
+    <strong>공개(O)</strong>로 분류합니다.</p>
+    <table>
+      <tr><th>등급</th><th>정의</th><th>본 도구의 처리</th><th>예시 정보</th></tr>
+      <tr>
+        <td><span class="pill C">C</span> 기밀<br>Classified</td>
+        <td>비공개정보 중 중요도가 높은 고유식별·금융정보</td>
+        <td><strong>완전 마스킹</strong></td>
+        <td>주민등록번호, 신용카드, 계좌, 여권, 운전면허</td>
+      </tr>
+      <tr>
+        <td><span class="pill S">S</span> 민감<br>Sensitive</td>
+        <td>공개 시 개인·국가 이익 침해가 우려되는 식별 가능 정보</td>
+        <td><strong>부분 마스킹</strong></td>
+        <td>이름, 전화번호, 이메일, 주소, 생년월일, 차량번호</td>
+      </tr>
+      <tr>
+        <td><span class="pill O">O</span> 공개<br>Open</td>
+        <td>기밀·민감을 제외한 모든 정보</td>
+        <td><strong>원본 유지</strong></td>
+        <td>부서명, 직급, 일반 텍스트·숫자</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 3. 도구 동작 원리 -->
+  <div class="card">
+    <h2>3. 본 도구는 어떻게 분류·마스킹하는가</h2>
+    <p>업로드된 엑셀의 <strong>모든 셀</strong>을 스캔하여, 정해진 규칙에 맞는 정보를 찾아
+    등급별로 차등 마스킹합니다. <strong>한 셀에 여러 정보가 섞여 있어도 각각 탐지</strong>합니다.</p>
+
+    <h3>🧩 정보 유형 → 등급 → 마스킹 규칙</h3>
+    <table>
+      <tr><th>정보 유형</th><th>등급</th><th>탐지 근거(설명 가능)</th><th>마스킹 예시</th></tr>
+      <tr><td>주민등록번호</td><td><span class="pill C">C</span></td><td>6자리-성별1+6자리 형식</td><td><code>900101-1234567</code> <span class="arrow">→</span> <code>******-*******</code></td></tr>
+      <tr><td>신용카드번호</td><td><span class="pill C">C</span></td><td>4-4-4-4 숫자 형식</td><td><code>1234-5678-9012-3456</code> <span class="arrow">→</span> <code>****-****-****-****</code></td></tr>
+      <tr><td>계좌번호</td><td><span class="pill C">C</span></td><td>'계좌/예금/입금' 문맥 + 숫자</td><td><code>계좌 110-234-567890</code> <span class="arrow">→</span> <code>계좌 ***-***-******</code></td></tr>
+      <tr><td>여권번호</td><td><span class="pill C">C</span></td><td>영문 1자 + 숫자 8자</td><td><code>M12345678</code> <span class="arrow">→</span> <code>M********</code></td></tr>
+      <tr><td>이름</td><td><span class="pill S">S</span></td><td>이름컬럼 / 직함 / 연락처 인접</td><td><code>홍길동</code> <span class="arrow">→</span> <code>홍*동</code></td></tr>
+      <tr><td>전화번호</td><td><span class="pill S">S</span></td><td>0으로 시작 3-4-4 형식</td><td><code>010-1234-5678</code> <span class="arrow">→</span> <code>010-****-5678</code></td></tr>
+      <tr><td>이메일</td><td><span class="pill S">S</span></td><td>local@domain 형식</td><td><code>hong@gmail.com</code> <span class="arrow">→</span> <code>ho**@gmail.com</code></td></tr>
+      <tr><td>주소</td><td><span class="pill S">S</span></td><td>시/도 + 행정구역(구·동·로)</td><td><code>서울시 강남구 역삼동</code> <span class="arrow">→</span> <code>서울시 *** ***</code></td></tr>
+      <tr><td>생년월일</td><td><span class="pill S">S</span></td><td>YYYY-MM-DD 날짜 형식</td><td><code>1990-01-01</code> <span class="arrow">→</span> <code>1990-**-**</code></td></tr>
+      <tr><td>차량번호</td><td><span class="pill S">S</span></td><td>숫자+한글+숫자4 형식</td><td><code>12가3456</code> <span class="arrow">→</span> <code>**가****</code></td></tr>
+    </table>
+
+    <h3>🔑 핵심: 한 셀 안 다중 정보 동시 마스킹</h3>
+    <table>
+      <tr><th>원본 셀</th><th>마스킹 결과</th><th>탐지</th></tr>
+      <tr><td><code>홍길동 010-1234-5678</code></td><td><code>홍*동 010-****-5678</code></td><td>이름 + 전화</td></tr>
+      <tr><td><code>김철수 / hong@gmail.com / 010-9876-5432</code></td><td><code>김*수 / ho**@gmail.com / 010-****-5432</code></td><td>이름 + 이메일 + 전화</td></tr>
+    </table>
+  </div>
+
+  <!-- 4. 설명가능성 -->
+  <div class="card">
+    <h2>4. 모든 결과는 "설명 가능"해야 한다</h2>
+    <p>규제·정책 기반 도구의 신뢰는 <strong>"왜 이렇게 분류·마스킹했는가"를 댈 수 있는가</strong>에서 나옵니다.
+    본 도구는 이를 위해:</p>
+    <ul>
+      <li>저장 파일에 <strong>[분류리포트]</strong> 시트 — 컬럼별 탐지 유형·등급·건수·<strong>탐지 근거</strong> 기록</li>
+      <li>저장 파일에 <strong>[N2SF근거]</strong> 시트 — 적용 기준·등급 정의·원문 확인 안내·참고 동향 기록(외부 URL 없음)</li>
+      <li>앱 내 <strong>[ℹ️ N2SF 기준·근거 보기]</strong> — 등급 정의와 원문 확인처(국정원 홈페이지) 안내</li>
+    </ul>
+    <h3>⚖️ 이름 탐지의 보수적 설계 (오탐 방지)</h3>
+    <p>자유 텍스트 속 한글 이름은 일반 명사와 구분이 어렵습니다(예: "차량", "여권").
+    잘못된 마스킹을 막기 위해 이름은 <strong>다음 근거가 있을 때만</strong> 탐지합니다.</p>
+    <ol>
+      <li><strong>이름 컬럼</strong>으로 판정된 컬럼의 값 (헤더에 '이름/성명/담당자' 등)</li>
+      <li>이름 뒤 <strong>호칭·직함</strong> 동반 (예: <code>박영희 과장</code>)</li>
+      <li><strong>연락처/식별정보와 인접</strong> (예: <code>홍길동 010-…</code>)</li>
+    </ol>
+    <div class="note">
+      그래서 <code>차량 12가3456</code>의 "차량"이나 <code>여권 M12345678</code>의 "여권"은
+      이름으로 오인하지 않습니다. 라벨 단어는 그대로 두고 실제 값만 마스킹합니다.
+    </div>
+  </div>
+
+  <!-- 5. 사용 절차 -->
+  <div class="card">
+    <h2>5. 사용 절차</h2>
+    <ol>
+      <li><strong>파일 열기</strong> → 엑셀(.xlsx) 선택</li>
+      <li><strong>자동 분류 결과 확인</strong> — 컬럼별 C/S/O 배지·탐지유형·미리보기(원본→마스킹)</li>
+      <li>마스킹할 컬럼 <strong>체크 조정</strong> (공개(O)는 기본 해제)</li>
+      <li><strong>마스킹 실행 및 저장</strong> → 결과/리포트/근거 3시트 저장</li>
+    </ol>
+  </div>
+
+  <!-- 6. 확인 퀴즈 -->
+  <div class="card">
+    <h2>6. 이해도 점검 퀴즈</h2>
+    <div class="quiz"><details>
+      <summary>Q1. 주민등록번호와 이메일은 각각 어떤 등급인가?</summary>
+      <p>주민등록번호 = <strong>기밀(C), 완전 마스킹</strong> / 이메일 = <strong>민감(S), 부분 마스킹</strong></p>
+    </details></div>
+    <div class="quiz"><details>
+      <summary>Q2. "홍길동 010-1234-5678" 한 셀은 어떻게 처리되나?</summary>
+      <p>이름과 전화번호를 <strong>각각</strong> 탐지하여 <code>홍*동 010-****-5678</code>로 마스킹됩니다.</p>
+    </details></div>
+    <div class="quiz"><details>
+      <summary>Q3. "차량 12가3456"에서 "차량"이 이름으로 마스킹되지 않는 이유는?</summary>
+      <p>이름은 <strong>이름컬럼/직함/연락처 인접</strong> 근거가 있을 때만 탐지하기 때문입니다.
+      "차량"은 그 근거가 없어 제외됩니다.</p>
+    </details></div>
+    <div class="quiz"><details>
+      <summary>Q4. N2SF 가이드라인 정식판 1.0은 언제 공개되었나?</summary>
+      <p>2025년 9월(CSK 2025에서 발표, 9월 30일 정식 공개). 초안은 2025년 1월.
+      전국 일괄 시행일은 단일 날짜로 공표되지 않았습니다.</p>
+    </details></div>
+  </div>
+
+  <div class="foot">
+    정식 근거(원문)는 국정원 홈페이지에서 확인할 수 있으며, 언론·보도자료는 참고 동향입니다.<br>
+    외부 링크는 업무망(폐쇄망) 환경을 고려해 첨부하지 않았습니다.
+  </div>
+
+</div>
+</body>
+</html>
