@@ -17,6 +17,9 @@ web/logs/
 # 대용량 참고 원문(국정원 N2SF 가이드라인 PDF) — 로컬 보관·깃 제외(공개문서·약 25MB)
 *.pdf
 
+# 임시 테스트 스크립트
+_test_*.py
+
 # 임시/IDE
 .vscode/
 .idea/

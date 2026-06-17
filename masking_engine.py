@@ -13,6 +13,7 @@ UI/프레임워크 의존성 없음 — pandas, re 만 사용.
 [참고] N2SF는 향후 전환 대비 참고 분류이며, 이 도구의 핵심은 '마스킹'이다.
 """
 
+import io
 import re
 from datetime import datetime, date, time
 import openpyxl
@@ -352,9 +353,9 @@ class Table:
         return [(r[i] if i < len(r) else None) for r in self.rows]
 
 
-def read_table(src):
-    """xlsx 파일경로/파일객체 → Table. 첫 행을 헤더로 본다."""
-    wb = openpyxl.load_workbook(src, read_only=True, data_only=True)
+def _from_xlsx(raw):
+    """진짜 xlsx(zip) → Table."""
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
     ws = wb.active
     it = ws.iter_rows(values_only=True)
     try:
@@ -366,6 +367,71 @@ def read_table(src):
     rows = [list(r) for r in it]
     wb.close()
     return Table(headers, rows)
+
+
+def _from_xls(raw):
+    """구형 .xls(BIFF/OLE2) → Table. (xlrd)"""
+    import xlrd
+    book = xlrd.open_workbook(file_contents=raw)
+    sh = book.sheet_by_index(0)
+    if sh.nrows == 0:
+        return Table([], [])
+    headers = [("" if v == "" else str(v)) for v in sh.row_values(0)]
+    rows = [list(sh.row_values(r)) for r in range(1, sh.nrows)]
+    return Table(headers, rows)
+
+
+def _from_html(raw):
+    """HTML/XML 표로 위장된 엑셀 → Table. (pandas.read_html)"""
+    import pandas as pd
+    dfs = pd.read_html(io.BytesIO(raw))
+    if not dfs:
+        raise ValueError("HTML에서 표를 찾지 못했습니다.")
+    df = dfs[0]
+    headers = [str(c) for c in df.columns]
+    rows = []
+    for rec in df.itertuples(index=False, name=None):
+        rows.append([(None if (v is None or (isinstance(v, float) and v != v)) else v)
+                     for v in rec])
+    return Table(headers, rows)
+
+
+def read_table(src):
+    """
+    파일경로/바이트/파일객체 → Table. 확장자에 의존하지 않고 '실제 내용'으로 판별한다.
+    지원: 진짜 xlsx(zip) · 구형 .xls(OLE2) · HTML/XML 표로 위장된 엑셀.
+    """
+    if isinstance(src, str):
+        with open(src, "rb") as f:
+            raw = f.read()
+    elif isinstance(src, (bytes, bytearray)):
+        raw = bytes(src)
+    else:
+        raw = src.read()
+    if not raw:
+        return Table([], [])
+
+    low = raw[:2048].lower()
+    # 1) 진짜 xlsx (zip 시그니처 PK)
+    if raw[:2] == b"PK":
+        try:
+            return _from_xlsx(raw)
+        except Exception:
+            pass
+    # 2) 구형 .xls (OLE2 시그니처)
+    if raw[:4] == b"\xd0\xcf\x11\xe0":
+        return _from_xls(raw)
+    # 3) HTML/XML 표 위장
+    if (b"<html" in low or b"<table" in low or b"<!doctype" in low
+            or low.lstrip().startswith(b"<?xml")):
+        return _from_html(raw)
+    # 4) 시그니처가 모호하면 순서대로 시도
+    for fn in (lambda: _from_xlsx(raw), lambda: _from_xls(raw), lambda: _from_html(raw)):
+        try:
+            return fn()
+        except Exception:
+            pass
+    raise ValueError("지원하지 않는 형식이거나 손상된 파일입니다. Excel에서 .xlsx로 다시 저장해 보세요.")
 
 
 def _cell(v):

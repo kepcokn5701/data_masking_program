@@ -1,3 +1,6 @@
 openpyxl
+xlrd
+pandas
+lxml
 flask
 waitress
