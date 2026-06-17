@@ -1,63 +1,39 @@
 @echo off
-chcp 65001 > nul
-title ¿¢¼¿ ¸¶½ºÅ· µµ±¸ - ÀÚµ¿ ºôµå
+chcp 65001 >nul
+title N2SF ë§ˆìŠ¤í‚¹ - EXE ë¹Œë“œ (ë°ìŠ¤í¬í†± + ì›¹ì„œë²„)
+cd /d "%~dp0"
+
+set PY=python
+where py >nul 2>nul && set PY=py
+
+echo ============================================
+echo   N2SF ë§ˆìŠ¤í‚¹ EXE ë¹Œë“œ
+echo ============================================
+echo.
+echo [1/3] í•„ìš”í•œ íŒ¨í‚¤ì§€ ì„¤ì¹˜/í™•ì¸...
+%PY% -m pip install openpyxl xlrd pandas lxml flask waitress pyinstaller --quiet --upgrade
+if errorlevel 1 ( echo [ì˜¤ë¥˜] íŒ¨í‚¤ì§€ ì„¤ì¹˜ ì‹¤íŒ¨ - ì¸í„°ë„·/ì‚¬ë‚´ë¯¸ëŸ¬ í™•ì¸ & pause & exit /b 1 )
 
 echo.
-echo ================================================
-echo   ¿¢¼¿ °³ÀÎÁ¤º¸ ¸¶½ºÅ· µµ±¸ - ÀÚµ¿ ºôµå ½ÃÀÛ
-echo ================================================
-echo.
-
-:: Python ¼³Ä¡ È®ÀÎ
-python --version > nul 2>&1
-if errorlevel 1 (
-    echo [¿À·ù] PythonÀÌ ¼³Ä¡µÇ¾î ÀÖÁö ¾Ê½À´Ï´Ù.
-    echo.
-    echo ¾Æ·¡ ÁÖ¼Ò¿¡¼­ PythonÀ» ¼³Ä¡ÇØ ÁÖ¼¼¿ä:
-    echo https://www.python.org/downloads/
-    echo.
-    echo ¼³Ä¡ ½Ã ¹İµå½Ã "Add Python to PATH" Ã¼Å©!
-    pause
-    exit /b 1
-)
-
-echo [1/4] Python È®ÀÎ ¿Ï·á
-python --version
+echo [2/3] ë°ìŠ¤í¬í†± EXE ë¹Œë“œ... (1~3ë¶„)
+%PY% -m PyInstaller --onefile --windowed --name "exel_info_masking_program(N2SF)" ^
+  --exclude-module matplotlib --exclude-module scipy --exclude-module PIL ^
+  --noconfirm excel_masking.py
+if errorlevel 1 ( echo [ì˜¤ë¥˜] ë°ìŠ¤í¬í†± ë¹Œë“œ ì‹¤íŒ¨ & pause & exit /b 1 )
 
 echo.
-echo [2/4] ÇÊ¿äÇÑ ÆĞÅ°Áö ¼³Ä¡ Áß... (Àá½Ã ±â´Ù·Á ÁÖ¼¼¿ä)
-pip install pandas openpyxl pyinstaller --quiet --upgrade
-if errorlevel 1 (
-    echo [¿À·ù] ÆĞÅ°Áö ¼³Ä¡ ½ÇÆĞ. ÀÎÅÍ³İ ¿¬°áÀ» È®ÀÎÇØ ÁÖ¼¼¿ä.
-    pause
-    exit /b 1
-)
-echo ÆĞÅ°Áö ¼³Ä¡ ¿Ï·á!
+echo [3/3] ì›¹ì„œë²„ EXE ë¹Œë“œ... (1~3ë¶„)
+%PY% -m PyInstaller --onefile --console --name "exel_info_masking_webserver(N2SF)" ^
+  --add-data "web/templates;templates" --paths "." --paths "web" ^
+  --exclude-module matplotlib --exclude-module scipy --exclude-module PIL ^
+  --noconfirm web/app.py
+if errorlevel 1 ( echo [ì˜¤ë¥˜] ì›¹ì„œë²„ ë¹Œë“œ ì‹¤íŒ¨ & pause & exit /b 1 )
 
 echo.
-echo [3/4] EXE ÆÄÀÏ ºôµå Áß... (1~2ºĞ ¼Ò¿ä)
-pyinstaller --onefile --windowed --name "¿¢¼¿_¸¶½ºÅ·_µµ±¸" excel_masking.py --noconfirm
-if errorlevel 1 (
-    echo [¿À·ù] ºôµå ½ÇÆĞ. ¿À·ù ¸Ş½ÃÁö¸¦ È®ÀÎÇØ ÁÖ¼¼¿ä.
-    pause
-    exit /b 1
-)
-
-echo.
-echo [4/4] ¿Ï·á! EXE ÆÄÀÏ À§Ä¡ È®ÀÎ Áß...
-
-if exist "dist\¿¢¼¿_¸¶½ºÅ·_µµ±¸.exe" (
-    echo.
-    echo ================================================
-    echo   ºôµå ¼º°ø!!
-    echo   À§Ä¡: %CD%\dist\¿¢¼¿_¸¶½ºÅ·_µµ±¸.exe
-    echo ================================================
-    echo.
-    echo Áö±İ ¹Ù·Î ½ÇÇàÇÒ±î¿ä? (dist Æú´õ°¡ ¿­¸³´Ï´Ù)
-    explorer dist
-) else (
-    echo [¿À·ù] EXE ÆÄÀÏÀ» Ã£À» ¼ö ¾ø½À´Ï´Ù.
-)
-
-echo.
+echo ============================================
+echo   ì™„ë£Œ! dist í´ë”ì— EXE 2ê°œ ìƒì„±ë¨
+echo    - exel_info_masking_program(N2SF).exe   (ë°ìŠ¤í¬í†±)
+echo    - exel_info_masking_webserver(N2SF).exe (ì›¹ì„œë²„)
+echo ============================================
+explorer dist
 pause
