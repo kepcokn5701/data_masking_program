@@ -418,9 +418,15 @@ def read_table(src):
             return _from_xlsx(raw)
         except Exception:
             pass
-    # 2) 구형 .xls (OLE2 시그니처)
+    # 2) 구형 .xls (OLE2 시그니처) — 단, 문서보안(DRM) 암호화 파일도 OLE2 컨테이너다
     if raw[:4] == b"\xd0\xcf\x11\xe0":
-        return _from_xls(raw)
+        try:
+            return _from_xls(raw)
+        except Exception:
+            raise ValueError(
+                "구형 .xls가 아니거나 문서보안(DRM)으로 암호화된 파일일 수 있습니다. "
+                "Excel에서 파일을 연 뒤 '다른 이름으로 저장 → Excel 통합 문서(*.xlsx)'로 "
+                "저장(DRM 해제)한 파일을 사용하세요.")
     # 3) HTML/XML 표 위장
     if (b"<html" in low or b"<table" in low or b"<!doctype" in low
             or low.lstrip().startswith(b"<?xml")):
@@ -431,7 +437,9 @@ def read_table(src):
             return fn()
         except Exception:
             pass
-    raise ValueError("지원하지 않는 형식이거나 손상된 파일입니다. Excel에서 .xlsx로 다시 저장해 보세요.")
+    raise ValueError(
+        "지원하지 않는 형식이거나 손상·암호화된 파일입니다. "
+        "문서보안(DRM) 파일이면 Excel에서 열어 '.xlsx'로 다시 저장(해제) 후 사용하세요.")
 
 
 def _cell(v):

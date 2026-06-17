@@ -67,7 +67,7 @@ def analyze():
                   user=request.form.get("user", ""),
                   filename=getattr(f, "filename", ""), status="error",
                   detail="파일 읽기 실패")
-        return jsonify(error=f"파일을 읽을 수 없습니다(.xls는 .xlsx로 저장): {e}"), 400
+        return jsonify(error=f"파일을 읽을 수 없습니다: {e}"), 400
 
     token = uuid.uuid4().hex
     with open(_token_path(token), "wb") as fp:    # 처리 사이 임시 보관(분석→마스킹)
@@ -113,10 +113,13 @@ def _mask_one(item, user, client_ip):
     if not selected:
         return None, "마스킹할 컬럼을 하나 이상 선택해 주세요."
 
-    table = read_table(path)
-    result, report_rows, ref_rows = mask_dataframe(table, selected)
-    bio = io.BytesIO()
-    write_workbook(bio, result, report_rows, ref_rows)
+    try:
+        table = read_table(path)
+        result, report_rows, ref_rows = mask_dataframe(table, selected)
+        bio = io.BytesIO()
+        write_workbook(bio, result, report_rows, ref_rows)
+    except Exception as e:
+        return None, f"파일을 처리할 수 없습니다: {e}"
 
     try:
         os.remove(path)                            # 처리 후 즉시 삭제(서버에 잔존 X)
@@ -168,6 +171,15 @@ def mask():
 @app.errorhandler(413)
 def too_large(_e):
     return jsonify(error="파일이 너무 큽니다(최대 50MB)."), 413
+
+
+@app.errorhandler(Exception)
+def _json_errors(e):
+    """어떤 오류든 JSON으로 응답(프론트가 항상 파싱 가능 → 'not valid json' 방지)."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return jsonify(error=e.description), e.code
+    return jsonify(error=f"서버 처리 오류: {e}"), 500
 
 
 def _lan_ip():

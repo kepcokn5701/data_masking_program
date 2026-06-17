@@ -192,7 +192,7 @@ class MaskingApp(tk.Tk):
             self.update()
             self._analyze_and_render()
         except Exception as e:
-            messagebox.showerror("오류", f"파일을 읽을 수 없습니다.\n(.xls는 .xlsx로 저장해 주세요)\n{e}")
+            messagebox.showerror("오류", f"파일을 읽을 수 없습니다.\n\n{e}")
 
     # ── 분석 + 목록 렌더링 ────────────────────────────────────
     def _analyze_and_render(self):
