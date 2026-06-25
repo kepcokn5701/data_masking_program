@@ -20,6 +20,10 @@ web/logs/
 # 임시 테스트 스크립트
 _test_*.py
 
+# 설치파일 산출물 / 감시폴더(런타임 생성)
+installer_output/
+마스킹_감시폴더/
+
 # 임시/IDE
 .vscode/
 .idea/
