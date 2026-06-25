@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 · 사용 이력</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#0f172a;color:#e2e8f0}
+  header{background:#1e3a5f;padding:14px 22px;display:flex;justify-content:space-between;align-items:center}
+  header .t{font-weight:800}
+  header a{color:#bcd0e8;font-size:.85rem;text-decoration:none}
+  .wrap{max-width:1180px;margin:22px auto;padding:0 16px}
+  .login{max-width:360px;margin:90px auto;background:#1e293b;border-radius:14px;padding:30px;text-align:center}
+  .login h1{font-size:1.2rem;margin-bottom:6px}
+  .login p{color:#94a3b8;font-size:.85rem;margin-bottom:16px}
+  .login input{width:100%;padding:11px 14px;border-radius:8px;border:1px solid #334155;
+               background:#0f172a;color:#e2e8f0;font-size:1rem;margin-bottom:10px;outline:none}
+  .login button{width:100%;padding:11px;border:none;border-radius:8px;background:#2563eb;
+                color:#fff;font-weight:700;font-size:1rem;cursor:pointer}
+  .err{color:#fca5a5;font-size:.85rem;margin-bottom:8px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+  .card{background:#1e293b;border-radius:12px;padding:16px;text-align:center}
+  .card .n{font-size:1.7rem;font-weight:800;color:#60a5fa}
+  .card .l{color:#94a3b8;font-size:.8rem;margin-top:4px}
+  .card.err .n{color:#fca5a5}
+  .panel{background:#1e293b;border-radius:12px;padding:16px 18px;margin-bottom:18px}
+  .panel h2{font-size:.95rem;color:#cbd5e1;margin-bottom:10px}
+  .users span{display:inline-block;background:#0f172a;border:1px solid #334155;border-radius:20px;
+              padding:4px 12px;margin:3px;font-size:.85rem}
+  .users b{color:#60a5fa}
+  table{width:100%;border-collapse:collapse;font-size:.82rem}
+  th,td{border-bottom:1px solid #334155;padding:7px 9px;text-align:left;white-space:nowrap}
+  th{background:#0f172a;color:#94a3b8;position:sticky;top:0}
+  td.f{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+  .pill{padding:1px 8px;border-radius:6px;font-size:.75rem;font-weight:700}
+  .ev-mask{background:#16a34a;color:#fff}.ev-analyze{background:#334155;color:#cbd5e1}
+  .st-error{color:#fca5a5;font-weight:700}
+  .muted{color:#64748b}
+  .tablebox{background:#1e293b;border-radius:12px;padding:6px 10px;max-height:62vh;overflow:auto}
+</style>
+</head>
+<body>
+{% if not authed %}
+  <div class="login">
+    <h1>🔒 관리자 로그인</h1>
+    <p>사용 이력(누가·언제·무엇을) 조회</p>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/login">
+      <input type="password" name="pw" placeholder="관리자 비밀번호" autofocus>
+      <button type="submit">로그인</button>
+    </form>
+  </div>
+{% else %}
+  <header>
+    <span class="t">🔒 N2SF 마스킹 · 사용 이력 모니터링</span>
+    <span><a href="/">← 마스킹 도구</a> &nbsp;|&nbsp; <a href="/admin/logout">로그아웃</a></span>
+  </header>
+  <div class="wrap">
+    <div class="cards">
+      <div class="card"><div class="n">{{ stats.total }}</div><div class="l">총 기록</div></div>
+      <div class="card"><div class="n">{{ stats.today }}</div><div class="l">오늘</div></div>
+      <div class="card"><div class="n">{{ stats.users }}</div><div class="l">사용자 수</div></div>
+      <div class="card"><div class="n">{{ stats.mask }}</div><div class="l">마스킹</div></div>
+      <div class="card"><div class="n">{{ stats.analyze }}</div><div class="l">분석</div></div>
+      <div class="card err"><div class="n">{{ stats.errors }}</div><div class="l">오류</div></div>
+    </div>
+
+    <div class="panel users">
+      <h2>사용자별 사용 횟수 (상위 10)</h2>
+      {% for u, n in stats.by_user %}<span>{{ u }} <b>{{ n }}</b></span>{% endfor %}
+      {% if not stats.by_user %}<span class="muted">기록 없음</span>{% endif %}
+    </div>
+
+    <div class="panel" style="padding-bottom:10px">
+      <h2>최근 사용 이력 (최신순 · 최대 3000건)</h2>
+      <div class="tablebox">
+        <table>
+          <thead><tr>
+            <th>시각</th><th>사용자</th><th>IP</th><th>호스트</th><th>동작</th>
+            <th>파일</th><th>행</th><th>열(C/S)</th><th>건수</th><th>상태</th>
+          </tr></thead>
+          <tbody>
+          {% for r in recs %}
+            <tr>
+              <td>{{ r.get('ts','')[:19] }}</td>
+              <td>{{ r.get('user','') }}</td>
+              <td class="muted">{{ r.get('client_ip','') }}</td>
+              <td class="muted">{{ r.get('hostname','') }}</td>
+              <td><span class="pill ev-{{ r.get('event','') }}">{{ r.get('event','') }}</span></td>
+              <td class="f" title="{{ r.get('filename','') }}">{{ r.get('filename','') }}</td>
+              <td>{{ r.get('rows','') }}</td>
+              <td class="muted">{{ r.get('cols_total','') }}{% if r.get('cols_c') is not none %} ({{ r.get('cols_c',0) }}/{{ r.get('cols_s',0) }}){% endif %}</td>
+              <td>{{ r.get('selected_cnt','') }}</td>
+              <td>{% if r.get('status')=='error' %}<span class="st-error" title="{{ r.get('detail','') }}">오류</span>{% else %}<span class="muted">ok</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          {% if not recs %}<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">아직 사용 기록이 없습니다.</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endif %}
+</body>
+</html>

@@ -90,8 +90,10 @@ def _mask_name(seg):
         return s[0] + "*" * (len(s) - 2) + s[-1]
     return s
 
-_ADDR_REGION = (r"(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|"
-                r"전북|전남|경북|경남|제주)(?:특별자치시|특별자치도|특별시|광역시|시|도)?")
+_ADDR_REGION = (r"(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원특별자치도|강원|"
+                r"충청북도|충청남도|충북|충남|전라북도|전북특별자치도|전라남도|전북|전남|"
+                r"경상북도|경상남도|경북|경남|제주특별자치도|제주)"
+                r"(?:특별자치시|특별자치도|특별시|광역시|시|도)?")
 
 def _mask_address(seg):
     """주소: 시/도만 남기고 이후 토큰 마스킹 (서울시 강남구 역삼동 → 서울시 *** ***)"""
@@ -178,8 +180,9 @@ _NAME_FULL_RE = re.compile(r"^" + _NAME_CORE + r"$")
 _HONORIFICS = ("님", "씨", "군", "양", "귀하", "과장", "부장", "차장", "대리", "팀장",
                "사원", "이사", "대표", "선생", "교수", "박사", "주임", "실장", "원장",
                "사장", "회장", "상무", "전무", "고객님", "환자", "학생", "선수", "기사")
-_NAME_HEADERS = ("이름", "성명", "성함", "담당자", "담당", "대표자", "신청인", "수신자",
-                 "고객명", "회원명", "환자명", "예금주", "성씨", "name")
+_NAME_HEADERS = ("이름", "성명", "성함", "담당자", "담당", "대표자", "신청인", "신청자",
+                 "수신자", "수신인", "고객명", "회원명", "환자명", "예금주", "명의자",
+                 "가입자", "계약자", "성씨", "name")
 _NAME_STOP = {"전화", "전화번호", "연락", "연락처", "주민", "주민번호", "차량", "여권",
               "계좌", "주소", "고객", "회원", "정보", "성명", "이름", "번호", "메일",
               "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기",
@@ -261,11 +264,14 @@ def is_name_column(col_name, values):
     h = str(col_name).lower()
     if any(k.lower() in h for k in _NAME_HEADERS):
         return True
-    sample = [str(v) for v in values if v is not None][:100]
-    if not sample:
+    sample = [str(v).strip() for v in values if v is not None][:200]
+    if len(sample) < 5:
         return False
-    hit = sum(1 for v in sample if _NAME_FULL_RE.match(v.strip()))
-    return hit >= max(3, len(sample) * 0.6)
+    hit = sum(1 for v in sample if _NAME_FULL_RE.match(v))
+    distinct = len(set(sample))
+    # 이름 컬럼은 (a) 다수가 성씨+이름 형태이고 (b) 값이 충분히 다양해야 함.
+    # (주택/비주택, 전화/방문 같은 '카테고리' 컬럼 오탐 방지)
+    return hit >= max(3, len(sample) * 0.6) and distinct >= max(5, len(sample) * 0.3)
 
 
 def analyze_column(values, name_column, sample_size=200):
@@ -288,10 +294,44 @@ def analyze_column(values, name_column, sample_size=200):
     return ("C" if "C" in grade_set else "S"), type_counts, type_whys, before, after
 
 
+# ── 헤더(컬럼명) 기반 규칙 — 정형 자료에서 '제목'으로 판별(가장 정확·설명가능) ──
+# (헤더에 포함되면 매칭되는 키워드, 유형, 등급, 마스크함수). 위에서부터 우선.
+HEADER_RULES = [
+    (("주민등록번호", "주민번호"), "주민등록번호", "C", _mask_all_digits),
+    (("여권번호",), "여권번호", "C", _mask_passport),
+    (("계좌번호", "계좌"), "계좌번호", "C", _mask_all_digits),
+    (("카드번호",), "신용카드번호", "C", _mask_all_digits),
+    (("운전면허", "면허번호"), "운전면허번호", "C", _mask_all_digits),
+    (("사업자등록번호", "사업자번호"), "사업자등록번호", "S", _mask_all_digits),
+    (("고객번호",), "고객번호", "S", _mask_all_digits),
+    (("우편번호",), "우편번호", "S", _mask_all_digits),
+    (("접수번호", "신청번호", "처리번호", "관리번호", "민원번호"), "접수번호", "S", _mask_all_digits),
+    (("전화", "휴대폰", "핸드폰", "연락처"), "전화번호", "S", _mask_phone),
+    (("이메일", "메일", "email", "e-mail"), "이메일", "S", _mask_email),
+    (("주소", "소재지", "거주지"), "주소", "S", _mask_address),
+    (("명의자", "신청자", "성명", "이름", "성함", "담당자", "대표자", "수신자", "수신인",
+      "고객명", "회원명", "환자명", "예금주", "가입자", "계약자"), "이름", "S", _mask_name),
+    (("생년월일", "생일"), "생년월일", "S", _mask_birth),
+    (("차량번호",), "차량번호", "S", _mask_vehicle),
+]
+
+
+def column_masker(header):
+    """헤더로 결정되는 (유형, 등급, 마스크함수) 또는 None."""
+    h = str(header).replace(" ", "")
+    for keys, typ, grade, fn in HEADER_RULES:
+        if any(k.replace(" ", "") in h for k in keys):
+            return typ, grade, fn
+    return None
+
+
 def grade_of_type(typ):
     for r in ENTITY_RULES:
         if r["type"] == typ:
             return r["grade"]
+    for _keys, t, g, _fn in HEADER_RULES:
+        if t == typ:
+            return g
     return "S"   # 이름 등
 
 
@@ -321,6 +361,8 @@ NAME_RISK = {
 
 def risk_of(typ, why=None):
     """탐지 1건의 (추정 오탐 %, 근거 문장)."""
+    if why and why.startswith("헤더"):
+        return (6, "컬럼 제목(헤더)이 해당 정보임을 명시 → 오탐 가능성 낮음.")
     if typ == "이름":
         return NAME_RISK.get(why, (27, "이름으로 추정되나 일반 단어일 수 있습니다."))
     return FP_RISK.get(typ, (20, "자동 판정이라 확인이 필요합니다."))
@@ -353,47 +395,65 @@ class Table:
         return [(r[i] if i < len(r) else None) for r in self.rows]
 
 
-def _from_xlsx(raw):
-    """진짜 xlsx(zip) → Table."""
-    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    ws = wb.active
-    it = ws.iter_rows(values_only=True)
-    try:
-        header = next(it)
-    except StopIteration:
-        wb.close()
+def _nonempty(row):
+    return sum(1 for v in row if v is not None and str(v).strip() not in ("", "-"))
+
+
+def _build_table(all_rows):
+    """전체 행 리스트에서 '헤더 행'을 자동 탐지(제목/빈 줄 건너뜀)하고 Table 생성."""
+    all_rows = [r for r in all_rows if r is not None]
+    if not all_rows:
         return Table([], [])
-    headers = [("" if h is None else str(h)) for h in header]
-    rows = [list(r) for r in it]
-    wb.close()
+    scan = all_rows[:25]
+    counts = [_nonempty(r) for r in scan]
+    maxc = max(counts) if counts else 0
+    if maxc <= 1:
+        hdr = 0                                   # 표가 1열뿐이면 그냥 첫 행
+    else:
+        thresh = max(3, maxc * 0.5)               # 채워진 셀이 충분히 많은 '첫' 행 = 헤더
+        hdr = next((i for i, c in enumerate(counts) if c >= thresh), 0)
+    headers = [("" if v is None else str(v).strip()) for v in all_rows[hdr]]
+    rows = [list(r) for r in all_rows[hdr + 1:]]
     return Table(headers, rows)
 
 
-def _from_xls(raw):
-    """구형 .xls(BIFF/OLE2) → Table. (xlrd)"""
+def _rows_xlsx(raw):
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    rows = [list(r) for r in wb.active.iter_rows(values_only=True)]
+    wb.close()
+    return rows
+
+
+def _rows_xls(raw):
     import xlrd
     book = xlrd.open_workbook(file_contents=raw)
     sh = book.sheet_by_index(0)
-    if sh.nrows == 0:
-        return Table([], [])
-    headers = [("" if v == "" else str(v)) for v in sh.row_values(0)]
-    rows = [list(sh.row_values(r)) for r in range(1, sh.nrows)]
-    return Table(headers, rows)
+    return [list(sh.row_values(r)) for r in range(sh.nrows)]
 
 
-def _from_html(raw):
-    """HTML/XML 표로 위장된 엑셀 → Table. (pandas.read_html)"""
+def _rows_html(raw):
     import pandas as pd
-    dfs = pd.read_html(io.BytesIO(raw))
+    dfs = pd.read_html(io.BytesIO(raw), header=None)
     if not dfs:
         raise ValueError("HTML에서 표를 찾지 못했습니다.")
     df = dfs[0]
-    headers = [str(c) for c in df.columns]
-    rows = []
+    out = []
     for rec in df.itertuples(index=False, name=None):
-        rows.append([(None if (v is None or (isinstance(v, float) and v != v)) else v)
-                     for v in rec])
-    return Table(headers, rows)
+        out.append([(None if (v is None or (isinstance(v, float) and v != v)) else v)
+                    for v in rec])
+    return out
+
+
+def _from_xlsx(raw):
+    return _build_table(_rows_xlsx(raw))
+
+
+def _from_xls(raw):
+    return _build_table(_rows_xls(raw))
+
+
+def _from_html(raw):
+    return _build_table(_rows_html(raw))
 
 
 def read_table(src):
@@ -449,13 +509,37 @@ def _cell(v):
     return str(v)
 
 
+def _scan_column(header, values, sample_size=200):
+    """한 컬럼 분석 → (grade, counts, whys, before, after). 헤더 규칙 우선, 없으면 셀 스캔."""
+    rule = column_masker(header)
+    name_col = is_name_column(header, values)
+    counts, whys, grades = {}, {}, set()
+    before = after = ""
+    for v in [x for x in values if x is not None][:sample_size]:
+        s = str(v)
+        if rule:
+            typ, grade, fn = rule
+            masked = fn(s)
+            dets = [(typ, grade, "헤더(컬럼명) 기반 분류")] if masked != s else []
+        else:
+            masked, dets = mask_cell(s, name_col)
+        if dets:
+            for t, g, why in dets:
+                counts[t] = counts.get(t, 0) + 1
+                whys.setdefault(t, set()).add(why)
+                grades.add(g)
+            if not before:
+                before, after = s, str(masked)
+    if not counts:
+        return "O", {}, {}, "", ""
+    return ("C" if "C" in grades else "S"), counts, whys, before, after
+
+
 def analyze_dataframe(table):
     """전체 표를 컬럼별로 분류. → 리스트[dict]."""
     cols = []
     for col in table.headers:
-        values = table.column(col)
-        name_col = is_name_column(col, values)
-        grade, counts, whys, before, after = analyze_column(values, name_col)
+        grade, counts, whys, before, after = _scan_column(col, table.column(col))
         risk_items = []
         for t in counts:
             pct, reason = max((risk_of(t, w) for w in (whys.get(t) or {None})),
@@ -464,7 +548,7 @@ def analyze_dataframe(table):
         risk_items.sort(key=lambda x: -x["pct"])
         cols.append({
             "name": str(col), "grade": grade, "types": counts,
-            "before": before, "after": after, "name_col": name_col,
+            "before": before, "after": after,
             "suggest": grade != "O",
             "risk": max((r["pct"] for r in risk_items), default=0),
             "risk_items": risk_items,
@@ -490,12 +574,12 @@ def mask_dataframe(table, targets, name_cols=None):
     targets 컬럼을 마스킹. name_cols: {col: bool} (없으면 자동 판정).
     반환: (result_table, report_rows, ref_rows)  ← 시트 기록용 행 리스트(헤더 포함)
     """
-    idx_of = {}
-    for t in targets:
-        if t in table.headers:
-            idx_of[t] = table.col_index(t)
-    nc = {t: (name_cols.get(t) if name_cols else is_name_column(t, table.column(t)))
-          for t in idx_of}
+    idx_of = {t: table.col_index(t) for t in targets if t in table.headers}
+    # 컬럼별 처리 계획: 헤더 규칙('h') 우선, 없으면 셀 스캔('c')
+    plan = {}
+    for t in idx_of:
+        rule = column_masker(t)
+        plan[t] = ("h", rule) if rule else ("c", is_name_column(t, table.column(t)))
     counts = {t: {} for t in idx_of}
     whys = {t: {} for t in idx_of}
 
@@ -506,12 +590,22 @@ def mask_dataframe(table, targets, name_cols=None):
             v = row[i] if i < len(row) else None
             if v is None:
                 continue
-            masked, dets = mask_cell(str(v), nc[t])
-            if dets:
-                nr[i] = masked
-                for typ, _g, why in dets:
+            s = str(v)
+            mode = plan[t]
+            if mode[0] == "h":
+                typ, _grade, fn = mode[1]
+                masked = fn(s)
+                if masked != s:
+                    nr[i] = masked
                     counts[t][typ] = counts[t].get(typ, 0) + 1
-                    whys[t].setdefault(typ, why)
+                    whys[t].setdefault(typ, "헤더(컬럼명) 기반 분류")
+            else:
+                masked, dets = mask_cell(s, mode[1])
+                if dets:
+                    nr[i] = masked
+                    for typ, _g, why in dets:
+                        counts[t][typ] = counts[t].get(typ, 0) + 1
+                        whys[t].setdefault(typ, why)
         new_rows.append(nr)
     result = Table(table.headers, new_rows)
 

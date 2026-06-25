@@ -13,8 +13,7 @@ import threading
 from masking_engine import (
     STANDARD_NAME, STANDARD_TIMELINE, GUIDE_NOTE, TREND_NOTES,
     GRADE_LABEL, GRADE_COLOR, GRADE_POLICY, GRADE_DEF, RISK_HIGH,
-    is_name_column, analyze_column, risk_of,
-    read_table, mask_dataframe, write_workbook, count_detections,
+    read_table, analyze_dataframe, mask_dataframe, write_workbook, count_detections,
 )
 
 
@@ -37,7 +36,6 @@ class MaskingApp(tk.Tk):
 
         self.filepath = tk.StringVar()
         self.table = None
-        self.col_meta = {}     # {col: (grade, counts, before, after, name_col)}
         self.col_checks = {}   # {col: BooleanVar}
         self.ack_var = tk.BooleanVar(value=False)   # 확인 후 사용(게이트)
         self._build_ui()
@@ -198,31 +196,23 @@ class MaskingApp(tk.Tk):
     def _analyze_and_render(self):
         for w in self.list_frame.winfo_children():
             w.destroy()
-        self.col_meta.clear()
         self.col_checks.clear()
 
         c_cnt = s_cnt = 0
         notice = {}   # 유형 → (최고 오탐%, 근거)
-        for i, col in enumerate(self.table.headers):
-            values = self.table.column(col)
-            name_col = is_name_column(col, values)
-            grade, counts, whys, before, after = analyze_column(values, name_col)
-            self.col_meta[col] = (grade, counts, before, after, name_col)
+        for i, c in enumerate(analyze_dataframe(self.table)):
+            col, grade, counts = c["name"], c["grade"], c["types"]
+            before, after = c["before"], c["after"]
             if grade == "C":
                 c_cnt += 1
             elif grade == "S":
                 s_cnt += 1
-            # 컬럼 오탐 추정 + 근거 집계
-            col_risk = 0
-            for t in counts:
-                pct, reason = max((risk_of(t, w) for w in (whys.get(t) or {None})),
-                                  key=lambda x: x[0])
-                col_risk = max(col_risk, pct)
-                if t not in notice or pct > notice[t][0]:
-                    notice[t] = (pct, reason)
-            check_var = tk.BooleanVar(value=(grade != "O"))
+            for it in c["risk_items"]:
+                if it["type"] not in notice or it["pct"] > notice[it["type"]][0]:
+                    notice[it["type"]] = (it["pct"], it["reason"])
+            check_var = tk.BooleanVar(value=c["suggest"])
             self.col_checks[col] = check_var
-            self._render_row(i, col, grade, counts, before, after, check_var, col_risk)
+            self._render_row(i, col, grade, counts, before, after, check_var, c["risk"])
 
         total = self.table.ncols
         self.summary_var.set(
@@ -301,8 +291,7 @@ class MaskingApp(tk.Tk):
 
     def _worker(self, targets, save_path):
         try:
-            name_cols = {c: self.col_meta[c][4] for c in targets}
-            result, report_rows, ref_rows = mask_dataframe(self.table, targets, name_cols)
+            result, report_rows, ref_rows = mask_dataframe(self.table, targets)
             write_workbook(save_path, result, report_rows, ref_rows)
 
             total = count_detections(report_rows)

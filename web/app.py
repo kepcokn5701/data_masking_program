@@ -12,18 +12,22 @@ import io
 import os
 import re
 import sys
+import glob
+import json
 import uuid
 import socket
 import zipfile
 import tempfile
+from collections import Counter
 
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import (Flask, request, jsonify, send_file, render_template,
+                   session, redirect, url_for)
 
 # 상위 폴더의 공용 엔진 import
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from masking_engine import (  # noqa: E402
     read_table, analyze_dataframe, mask_dataframe, write_workbook)
-from usage_logger import log_event  # noqa: E402
+from usage_logger import log_event, LOG_DIR  # noqa: E402
 
 def _resource(rel):
     """exe(PyInstaller)로 묶이면 임시 추출 폴더, 아니면 스크립트 폴더 기준 경로."""
@@ -33,6 +37,7 @@ def _resource(rel):
 
 app = Flask(__name__, template_folder=_resource("templates"))
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024   # 업로드 50MB 제한
+app.secret_key = os.urandom(24)                        # 관리자 세션용
 
 ALLOWED_EXT = (".xlsx", ".xls")
 TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -40,6 +45,9 @@ TMP_DIR = os.path.join(tempfile.gettempdir(), "n2sf_masking")
 os.makedirs(TMP_DIR, exist_ok=True)
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# 관리자 비밀번호 (환경변수 N2SF_ADMIN_PW로 변경 가능, 기본값 제공)
+ADMIN_PW = os.environ.get("N2SF_ADMIN_PW", "n2sf-admin")
 
 
 def _token_path(token):
@@ -166,6 +174,72 @@ def mask():
     zbuf.seek(0)
     return send_file(zbuf, as_attachment=True,
                      download_name="마스킹결과.zip", mimetype="application/zip")
+
+
+# ── 관리자 로그 모니터링 ───────────────────────────────────────
+
+def _read_logs(limit=3000):
+    """logs/usage-*.jsonl 들을 최신순으로 읽어 레코드 리스트 반환."""
+    recs = []
+    for fp in sorted(glob.glob(os.path.join(LOG_DIR, "usage-*.jsonl")), reverse=True):
+        try:
+            with open(fp, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            recs.append(json.loads(line))
+                        except ValueError:
+                            pass
+        except OSError:
+            pass
+        if len(recs) >= limit:
+            break
+    recs.sort(key=lambda r: r.get("ts", ""), reverse=True)
+    return recs[:limit]
+
+
+@app.get("/admin")
+def admin_redirect():
+    return redirect(url_for("admin_logs"))
+
+
+@app.post("/admin/login")
+def admin_login():
+    if (request.form.get("pw") or "") == ADMIN_PW:
+        session["admin"] = True
+    else:
+        return render_template("admin.html", authed=False, error="비밀번호가 올바르지 않습니다.")
+    return redirect(url_for("admin_logs"))
+
+
+@app.get("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect(url_for("admin_logs"))
+
+
+@app.get("/admin/logs")
+def admin_logs():
+    if not session.get("admin"):
+        return render_template("admin.html", authed=False, error="")
+    recs = _read_logs()
+    today = ""
+    try:
+        from datetime import datetime, timezone, timedelta
+        today = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    stats = {
+        "total": len(recs),
+        "users": len({r.get("user", "") for r in recs}),
+        "today": sum(1 for r in recs if str(r.get("ts", "")).startswith(today)),
+        "mask": sum(1 for r in recs if r.get("event") == "mask"),
+        "analyze": sum(1 for r in recs if r.get("event") == "analyze"),
+        "errors": sum(1 for r in recs if r.get("status") == "error"),
+        "by_user": Counter(r.get("user", "(미입력)") for r in recs).most_common(10),
+    }
+    return render_template("admin.html", authed=True, recs=recs, stats=stats)
 
 
 @app.errorhandler(413)
