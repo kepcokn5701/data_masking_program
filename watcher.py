@@ -125,7 +125,7 @@ def _open(folder):
 def _toggle_pause(icon, item):
     state["paused"] = not state["paused"]
     icon.icon = _icon_image(active=not state["paused"])
-    icon.title = "N2SF 마스킹 감시 — " + ("일시정지" if state["paused"] else "동작 중")
+    icon.title = "엑셀파일 개인정보 마스킹 감시 — " + ("일시정지" if state["paused"] else "동작 중")
 
 
 def _quit(icon, item):
@@ -137,7 +137,7 @@ def main():
     icon = pystray.Icon(
         "n2sf_watcher",
         icon=_icon_image(True),
-        title="N2SF 마스킹 감시 — 동작 중",
+        title="엑셀파일 개인정보 마스킹 감시 — 동작 중",
         menu=Menu(
             MenuItem(lambda i: f"감시폴더 열기 ({state['done']}건 처리됨)", _open(WATCH)),
             MenuItem("완료폴더 열기", _open(DONE)),
