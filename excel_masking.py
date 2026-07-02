@@ -10,10 +10,13 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import threading
 
+import make_manual
+
 from masking_engine import (
     STANDARD_NAME, STANDARD_TIMELINE, GUIDE_NOTE, TREND_NOTES,
     GRADE_LABEL, GRADE_COLOR, GRADE_POLICY, GRADE_DEF, RISK_HIGH,
     read_table, analyze_dataframe, mask_dataframe, write_workbook, count_detections,
+    MODE_LABEL, list_rules, add_column_rule, remove_column_rule,
 )
 
 
@@ -46,7 +49,7 @@ class MaskingApp(tk.Tk):
         hdr.pack(fill="x")
         tk.Label(hdr, text="🔒  엑셀파일 개인정보 마스킹",
                  font=("맑은 고딕", 15, "bold"), fg="white", bg="#1e3a5f").pack()
-        tk.Label(hdr, text="국정원 N2SF 기준 · 기밀(C) 완전 / 민감(S) 부분 / 공개(O) 유지",
+        tk.Label(hdr, text="개인정보(이름·전화·주민번호 등)를 별표(*)로 가려 안전한 사본을 만듭니다",
                  font=("맑은 고딕", 9), fg="#bcd0e8", bg="#1e3a5f").pack(pady=(2, 0))
 
         # 근거 바 (외부 링크 없이 안내만)
@@ -59,6 +62,9 @@ class MaskingApp(tk.Tk):
                   font=("맑은 고딕", 8, "bold"), padx=8).pack(side="left", padx=2, pady=2)
         tk.Label(srcbar, text="원문: 국정원(국가사이버안보센터) 홈페이지에서 확인",
                  font=("맑은 고딕", 8), fg="#64748b", bg="#eef2f7").pack(side="left", padx=6)
+        tk.Button(srcbar, text="📖 사용방법", command=self._open_manual,
+                  bg="#16a34a", fg="white", relief="flat",
+                  font=("맑은 고딕", 8, "bold"), padx=10).pack(side="right", padx=(2, 18), pady=2)
 
         # ① 파일 선택
         frm = tk.LabelFrame(self, text=" ① 파일 선택 ", font=("맑은 고딕", 10, "bold"),
@@ -71,7 +77,7 @@ class MaskingApp(tk.Tk):
                   relief="flat", padx=12, pady=4).pack(side="left")
 
         # ② 분류 결과
-        outer = tk.LabelFrame(self, text=" ② 자동 분류 결과 (체크된 컬럼만 마스킹) ",
+        outer = tk.LabelFrame(self, text=" ② 자동 분류 결과 (체크한 칸만 마스킹) ",
                               font=("맑은 고딕", 10, "bold"), bg="#f4f6f9", padx=10, pady=8)
         outer.pack(fill="both", expand=True, padx=18, pady=6)
         topbar = tk.Frame(outer, bg="#f4f6f9")
@@ -81,6 +87,9 @@ class MaskingApp(tk.Tk):
                  fg="#334155", bg="#f4f6f9").pack(side="left")
         tk.Button(topbar, text="전체 선택/해제", command=self._toggle_all,
                   bg="#e2e8f0", relief="flat", font=("맑은 고딕", 8), padx=6).pack(side="right")
+        tk.Button(topbar, text="📌 항상 마스킹할 칸 정하기", command=self._manage_rules,
+                  bg="#dbeafe", fg="#1e3a5f", relief="flat",
+                  font=("맑은 고딕", 8, "bold"), padx=6).pack(side="right", padx=4)
 
         self.canvas = tk.Canvas(outer, bg="#ffffff", highlightthickness=1,
                                 highlightbackground="#e2e8f0")
@@ -174,6 +183,93 @@ class MaskingApp(tk.Tk):
                  wraplength=580).pack(pady=(14, 6), padx=24)
         tk.Button(win, text="닫기", command=win.destroy, bg="#e2e8f0",
                   relief="flat", padx=16, pady=4).pack(pady=8)
+
+    # ── 사용설명서 열기 (프로그램 내장) ──────────────────────────
+    def _open_manual(self):
+        try:
+            make_manual.open_manual()   # HTML을 새로 만들어 기본 브라우저로 연다
+        except Exception as e:
+            messagebox.showerror("오류", f"사용설명서를 열 수 없습니다.\n{e}")
+
+    # ── 항상 마스킹 규칙 관리 (조직 학습형) ──────────────────────
+    def _manage_rules(self):
+        win = tk.Toplevel(self)
+        win.title("항상 마스킹할 칸 정하기")
+        win.geometry("560x520")
+        win.configure(bg="#ffffff")
+
+        tk.Label(win, text="📌 항상 마스킹할 칸 정하기",
+                 font=("맑은 고딕", 13, "bold"), fg="#1e3a5f", bg="#ffffff").pack(pady=(14, 2))
+        tk.Label(win, text="자동으로 안 잡히는 사내 고유 칸(계약번호·상호 등)을\n"
+                           "한 번 지정하면 다음부터 항상 자동으로 마스킹됩니다.",
+                 font=("맑은 고딕", 8), fg="#64748b", bg="#ffffff", justify="center").pack()
+
+        # 현재 규칙 목록
+        listwrap = tk.LabelFrame(win, text=" 지금까지 정한 칸 ", font=("맑은 고딕", 9, "bold"),
+                                 bg="#ffffff", padx=8, pady=6)
+        listwrap.pack(fill="both", expand=True, padx=16, pady=(10, 6))
+
+        label2mode = {v: k for k, v in MODE_LABEL.items()}
+
+        def refresh():
+            for w in listwrap.winfo_children():
+                w.destroy()
+            rules = list_rules()
+            if not rules:
+                tk.Label(listwrap, text="아직 등록된 규칙이 없습니다.", font=("맑은 고딕", 9),
+                         fg="#94a3b8", bg="#ffffff").pack(pady=16)
+            for r in rules:
+                row = tk.Frame(listwrap, bg="#f8fafc")
+                row.pack(fill="x", pady=1)
+                tk.Label(row, text=f"‘{r.get('match','')}’ 칸", width=22, anchor="w",
+                         font=("맑은 고딕", 9, "bold"), bg="#f8fafc").pack(side="left", padx=4)
+                tk.Label(row, text="→ " + MODE_LABEL.get(r.get("mode", "full"), "전체 가림"),
+                         width=16, anchor="w", font=("맑은 고딕", 8),
+                         fg="#475569", bg="#f8fafc").pack(side="left")
+                tk.Button(row, text="삭제", command=lambda m=r.get("match"): (
+                              remove_column_rule(m), refresh()),
+                          bg="#fee2e2", fg="#b91c1c", relief="flat",
+                          font=("맑은 고딕", 8), padx=6).pack(side="right", padx=4)
+
+        # 추가 폼
+        addfrm = tk.LabelFrame(win, text=" 새로 정하기 ", font=("맑은 고딕", 9, "bold"),
+                               bg="#ffffff", padx=8, pady=8)
+        addfrm.pack(fill="x", padx=16, pady=(0, 10))
+
+        tk.Label(addfrm, text="칸(열)", font=("맑은 고딕", 8), bg="#ffffff").grid(row=0, column=0, padx=2)
+        cols = list(self.table.headers) if self.table else []
+        col_var = tk.StringVar(value=cols[0] if cols else "")
+        if cols:
+            col_widget = ttk.Combobox(addfrm, textvariable=col_var, values=cols,
+                                      width=22, state="readonly")
+        else:
+            col_widget = tk.Entry(addfrm, textvariable=col_var, width=24)  # 파일 없으면 직접 입력
+        col_widget.grid(row=0, column=1, padx=4)
+
+        tk.Label(addfrm, text="방식", font=("맑은 고딕", 8), bg="#ffffff").grid(row=0, column=2, padx=2)
+        mode_var = tk.StringVar(value=MODE_LABEL["full"])
+        ttk.Combobox(addfrm, textvariable=mode_var, values=list(MODE_LABEL.values()),
+                     width=12, state="readonly").grid(row=0, column=3, padx=4)
+
+        def do_add():
+            header = col_var.get().strip()
+            if not header:
+                messagebox.showwarning("알림", "컬럼명을 입력/선택해 주세요.", parent=win)
+                return
+            add_column_rule(header, mode=label2mode.get(mode_var.get(), "full"))
+            refresh()
+            if self.table is not None:      # 열린 파일이 있으면 즉시 반영
+                self._analyze_and_render()
+
+        tk.Button(addfrm, text="＋ 추가", command=do_add, bg="#16a34a", fg="white",
+                  relief="flat", font=("맑은 고딕", 9, "bold"), padx=10).grid(
+            row=0, column=4, padx=6)
+
+        tk.Label(win, text="※ 규칙은 masking_rules.json에 저장되어 우클릭·자동감시에도 함께 적용됩니다.",
+                 font=("맑은 고딕", 8), fg="#94a3b8", bg="#ffffff", wraplength=520).pack(padx=16)
+        tk.Button(win, text="닫기", command=win.destroy, bg="#e2e8f0",
+                  relief="flat", padx=16, pady=4).pack(pady=8)
+        refresh()
 
     # ── 파일 열기 ─────────────────────────────────────────────
     def _open_file(self):

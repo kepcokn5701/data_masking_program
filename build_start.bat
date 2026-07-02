@@ -11,15 +11,19 @@ echo   엑셀파일 개인정보 마스킹 - EXE/설치파일 빌드
 echo ============================================
 echo.
 echo [1/4] 필요한 패키지 설치/확인...
-%PY% -m pip install openpyxl xlrd pandas lxml flask waitress pystray pillow pyinstaller --quiet --upgrade
+%PY% -m pip install openpyxl xlrd pandas lxml html5lib beautifulsoup4 flask waitress pystray pillow pyinstaller --quiet --upgrade
 if errorlevel 1 ( echo [오류] 패키지 설치 실패 - 인터넷/사내미러 확인 & pause & exit /b 1 )
 
 echo.
-echo [2/4] 프로그램(트레이 통합) EXE 빌드... (1~3분)
+echo [2/4] 프로그램(트레이+우클릭 통합) EXE 빌드... (1~3분)
 %PY% -m PyInstaller --onefile --windowed --name "exel_info_masking_program(N2SF)" ^
   --paths "." --hidden-import pystray._win32 ^
+  --hidden-import mask_cli --hidden-import register_context_menu --hidden-import uninstall ^
+  --hidden-import make_manual --hidden-import manual_assets ^
+  --hidden-import manual_assets_static --hidden-import manual_assets_lottie --hidden-import manual_assets_shots ^
+  --hidden-import lxml --hidden-import html5lib --hidden-import bs4 ^
   --exclude-module matplotlib --exclude-module scipy ^
-  --noconfirm app_tray.py
+  --noconfirm main.py
 if errorlevel 1 ( echo [오류] 프로그램 빌드 실패 & pause & exit /b 1 )
 
 echo.

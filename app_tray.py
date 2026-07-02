@@ -18,7 +18,8 @@ from PIL import Image, ImageDraw
 
 from excel_masking import MaskingApp
 from masking_engine import (read_table, analyze_dataframe, mask_dataframe,
-                            write_workbook, count_detections)
+                            write_workbook, count_detections, set_rules_path)
+import register_context_menu as ctxmenu
 
 
 def _data_dir():
@@ -29,12 +30,15 @@ def _data_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-WATCH = os.path.join(_data_dir(), "마스킹_감시폴더")
-DONE = os.path.join(WATCH, "_완료")
-SRC_KEEP = os.path.join(WATCH, "_원본")
+WATCH = os.path.join(_data_dir(), "자동_마스킹_폴더")
+DONE = os.path.join(WATCH, "_완료(마스킹된파일)")
+SRC_KEEP = os.path.join(WATCH, "_원본보관")
 ERR = os.path.join(WATCH, "_오류")
 for _d in (WATCH, DONE, SRC_KEEP, ERR):
     os.makedirs(_d, exist_ok=True)
+
+# 조직 학습형 규칙 파일(GUI·우클릭·감시폴더가 같은 규칙 공유)
+set_rules_path(os.path.join(_data_dir(), "masking_rules.json"))
 
 POLL_SEC = 3
 state = {"paused": False, "running": True, "done": 0}
@@ -87,7 +91,8 @@ def _process(path, icon):
         write_workbook(_unique(os.path.join(DONE, f"{base}_마스킹.xlsx")), result, report, ref)
         _move(path, SRC_KEEP)
         state["done"] += 1
-        _notify(icon, "마스킹 완료", f"{name} → _완료 폴더 ({count_detections(report)}건 마스킹)")
+        _notify(icon, "마스킹 완료",
+                f"{name} → 완료 폴더 (개인정보 {count_detections(report)}건 마스킹)")
     except Exception as e:
         _move(path, ERR)
         _notify(icon, "처리 실패", f"{name}: {e}")
@@ -147,6 +152,28 @@ def main():
         state["paused"] = not state["paused"]
         icon.icon = _icon_image(not state["paused"])
 
+    def open_manual(icon, item):
+        import make_manual
+        try:
+            make_manual.open_manual()
+        except Exception as e:
+            _notify(icon, "설명서 열기 실패", str(e))
+
+    def register_menu(icon, item):
+        try:
+            ctxmenu.register()
+            _notify(icon, "오른쪽클릭 메뉴 추가됨",
+                    "이제 파일에서 마우스 오른쪽 클릭 → '개인정보 마스킹 사본 만들기' 사용 가능")
+        except Exception as e:
+            _notify(icon, "추가 실패", str(e))
+
+    def unregister_menu(icon, item):
+        try:
+            ctxmenu.unregister()
+            _notify(icon, "오른쪽클릭 메뉴에서 뺐음", "오른쪽 클릭 메뉴에서 항목이 사라졌습니다.")
+        except Exception as e:
+            _notify(icon, "빼기 실패", str(e))
+
     def quit_all(icon, item):
         state["running"] = False
         try:
@@ -161,10 +188,14 @@ def main():
         title="엑셀파일 개인정보 마스킹",
         menu=Menu(
             MenuItem("마스킹 도구 열기", show, default=True),
+            MenuItem("📖 사용설명서 열기", open_manual),
             Menu.SEPARATOR,
-            MenuItem("감시폴더 열기", open_folder(WATCH)),
-            MenuItem("완료폴더 열기", open_folder(DONE)),
-            MenuItem("자동 감시 일시정지", toggle_pause, checked=lambda i: state["paused"]),
+            MenuItem("자동 마스킹 폴더 열기 (넣으면 자동 처리)", open_folder(WATCH)),
+            MenuItem("완료된 파일 폴더 열기", open_folder(DONE)),
+            MenuItem("자동 마스킹 잠시 멈춤", toggle_pause, checked=lambda i: state["paused"]),
+            Menu.SEPARATOR,
+            MenuItem("오른쪽클릭에 '마스킹 사본 만들기' 추가", register_menu),
+            MenuItem("오른쪽클릭 메뉴에서 빼기", unregister_menu),
             Menu.SEPARATOR,
             MenuItem("종료", quit_all),
         ),

@@ -23,6 +23,19 @@ _test_*.py
 # 설치파일 산출물 / 감시폴더(런타임 생성)
 installer_output/
 마스킹_감시폴더/
+자동_마스킹_폴더/
+
+# 런타임 감사로그(사용자·PC명·파일명 등 메타데이터) — 깃 제외
+감사로그/
+
+# ── 사내 실제 화면 캡처(내부 파일명·시스템 UI 노출) — 공개 저장소 제외 ──
+(업무망) 데이터 사전작업(DRM 해제).png
+*DRM 해제*.png
+manual_assets_static.py
+manual_assets_shots.py
+스크린샷/
+# 위 캡처가 임베드된 생성물(재생성 가능) — 깃 제외
+docs/사용설명서.html
 
 # 임시/IDE
 .vscode/

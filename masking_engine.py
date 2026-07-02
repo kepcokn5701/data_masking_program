@@ -14,7 +14,9 @@ UI/프레임워크 의존성 없음 — pandas, re 만 사용.
 """
 
 import io
+import os
 import re
+import json
 from datetime import datetime, date, time
 import openpyxl
 
@@ -103,6 +105,11 @@ def _mask_address(seg):
     masked = re.sub(r"[가-힣A-Za-z0-9]+", lambda x: "*" * len(x.group()), rest)
     return region + masked
 
+
+def _mask_full(seg):
+    """전체 가림: 공백만 남기고 모든 글자를 * (상호·사유 등 통째로 가릴 때)."""
+    return re.sub(r"\S", "*", seg)
+
 # ── 형식 검증 함수 (오탐 방지: 일반 숫자코드를 PII로 오인하지 않도록) ──
 
 def _valid_rrn(seg):
@@ -161,7 +168,7 @@ ENTITY_RULES = [
      "why": "이메일 형식(local@domain)에 일치"},
     {"type": "전화번호", "grade": "S", "priority": 7,
      # 유효 국번으로 시작할 때만: 휴대폰(01[016789])·서울(02)·지역(0[3-6][1-5])·070·050X
-     "regex": re.compile(r"\b0(?:1[016789]|2|[3-6][1-5]|70|50\d)[-\s]?\d{3,4}[-\s]?\d{4}\b"),
+     "regex": re.compile(r"\b0(?:1[016789]|2|[3-6][1-5]|70|50\d)[-.\s]?\d{3,4}[-.\s]?\d{4}\b"),
      "mask": _mask_phone,
      "why": "전화/휴대폰 형식(유효 국번으로 시작 3-4-4)에 일치"},
     {"type": "주소", "grade": "S", "priority": 8,
@@ -281,6 +288,57 @@ def is_name_column(col_name, values):
     return hit >= max(3, len(sample) * 0.6) and distinct >= max(5, len(sample) * 0.3)
 
 
+# ── 값(내용) 기반 주소 컬럼 판정 — 헤더 이름을 몰라도 값으로 인식 ──
+# 헤더가 '전기사용장소' 처럼 목록에 없어도, 값의 다수가 주소 형식이면 주소로 본다.
+_ADDR_UNIT_RE = re.compile(
+    r"[가-힣A-Za-z0-9]+(?:시|군|구|읍|면|동|리|로|길|가|번지|아파트|빌라|빌딩|타워|호|층|번길)")
+
+
+def is_address_column(values, sample_size=200):
+    """값의 다수가 주소 형태(시/도로 시작하거나 행정구역 토큰 2개 이상)면 True."""
+    sample = [str(v).strip() for v in values
+              if v is not None and str(v).strip() not in ("", "-")][:sample_size]
+    if len(sample) < 5:
+        return False
+
+    def looks_addr(s):
+        if re.match(_ADDR_REGION, s):                 # 서울/경기… 로 시작
+            return True
+        return len(_ADDR_UNIT_RE.findall(s)) >= 2      # 구+동, 로+번지 등 2토큰 이상
+
+    hit = sum(1 for s in sample if looks_addr(s))
+    return hit >= max(3, len(sample) * 0.5)
+
+
+def resolve_strategy(header, values):
+    """컬럼 처리 전략을 정한다(설명가능). 우선순위: 헤더규칙 > 이름값 > 주소값 > 셀스캔.
+    반환: ('header', (typ,grade,fn)) | ('addrcol', (…)) | ('namecol', None) | ('cell', False)"""
+    rule = column_masker(header)
+    if rule:
+        return ("header", rule)
+    if is_name_column(header, values):
+        return ("namecol", None)
+    if is_address_column(values):
+        return ("addrcol", ("주소", "S", _mask_address))
+    return ("cell", False)
+
+
+def _apply_strategy(strat, s):
+    """전략을 셀 값 하나에 적용 → (마스킹값, [(유형,등급,근거)…])."""
+    kind = strat[0]
+    if kind == "header":
+        typ, grade, fn = strat[1]
+        masked = fn(s)
+        return masked, ([(typ, grade, "헤더(컬럼명) 기반 분류")] if masked != s else [])
+    if kind == "addrcol":
+        typ, grade, fn = strat[1]
+        masked = fn(s)
+        return masked, ([(typ, grade, "값 패턴 기반 분류(주소 형식 다수)")] if masked != s else [])
+    if kind == "namecol":
+        return mask_cell(s, True)
+    return mask_cell(s, False)
+
+
 def analyze_column(values, name_column, sample_size=200):
     """컬럼 표본 분석 → (대표등급, {유형:건수}, {유형:{근거…}}, 원본예시, 마스킹예시).
     values: 셀 값 리스트."""
@@ -313,18 +371,114 @@ HEADER_RULES = [
     (("고객번호",), "고객번호", "S", _mask_all_digits),
     (("우편번호",), "우편번호", "S", _mask_all_digits),
     (("접수번호", "신청번호", "처리번호", "관리번호", "민원번호"), "접수번호", "S", _mask_all_digits),
-    (("전화", "휴대폰", "핸드폰", "연락처"), "전화번호", "S", _mask_phone),
+    (("전화", "휴대폰", "핸드폰", "연락처", "비상연락"), "전화번호", "S", _mask_phone),
     (("이메일", "메일", "email", "e-mail"), "이메일", "S", _mask_email),
-    (("주소", "소재지", "거주지"), "주소", "S", _mask_address),
+    (("주소", "소재지", "거주지", "사용장소", "설치장소", "장소", "위치", "번지"),
+     "주소", "S", _mask_address),
     (("명의자", "신청자", "성명", "이름", "성함", "담당자", "대표자", "수신자", "수신인",
-      "고객명", "회원명", "환자명", "예금주", "가입자", "계약자"), "이름", "S", _mask_name),
+      "고객명", "회원명", "환자명", "예금주", "가입자", "계약자",
+      "사용자명", "수용가명", "가입자명", "작업자명", "작성자명", "성명"), "이름", "S", _mask_name),
     (("생년월일", "생일", "출생"), "생년월일", "S", _mask_birth),
     (("차량번호",), "차량번호", "S", _mask_vehicle),
 ]
 
 
+# ── 조직 학습형 규칙 (사용자가 지정 → 기억) ──────────────────────
+# "언제까지 한전 컬럼을 뽑을 수 없다" → 내장 규칙에 없는 사내 고유 컬럼은
+# 사용자가 GUI에서 한 번 지정하면 masking_rules.json 에 저장되어 다음부터 자동 적용된다.
+# 내장 규칙보다 '우선'한다(사용자 명시 의도 존중).
+_MODE_FN = {
+    "full": _mask_full,          # 전체 가림 (상호·사유 등)
+    "digits": _mask_all_digits,  # 숫자만 (계약번호·고객번호 등)
+    "name": _mask_name,
+    "phone": _mask_phone,
+    "email": _mask_email,
+    "address": _mask_address,
+    "birth": _mask_birth,
+    "vehicle": _mask_vehicle,
+    "passport": _mask_passport,
+}
+MODE_LABEL = {                   # GUI 표시용
+    "full": "전체 가림", "digits": "숫자만 가림", "name": "이름식(홍*동)",
+    "phone": "전화번호식", "email": "이메일식", "address": "주소식",
+    "birth": "생년월일식", "vehicle": "차량번호식", "passport": "여권식",
+}
+_RULES_PATH = None
+_RULES_CACHE = None
+
+
+def set_rules_path(path):
+    """조직 규칙 파일 경로 지정(앱 시작 시 데이터 폴더로 설정). 캐시 초기화."""
+    global _RULES_PATH, _RULES_CACHE
+    _RULES_PATH = path
+    _RULES_CACHE = None
+
+
+def _load_rules():
+    global _RULES_CACHE
+    if _RULES_CACHE is not None:
+        return _RULES_CACHE
+    _RULES_CACHE = []
+    if _RULES_PATH and os.path.exists(_RULES_PATH):
+        try:
+            with open(_RULES_PATH, encoding="utf-8") as f:
+                _RULES_CACHE = json.load(f).get("columns", [])
+        except Exception:
+            _RULES_CACHE = []
+    return _RULES_CACHE
+
+
+def list_rules():
+    """현재 조직 규칙 목록(사본)."""
+    return [dict(r) for r in _load_rules()]
+
+
+def _save_rules(rules):
+    global _RULES_CACHE
+    _RULES_CACHE = rules
+    if _RULES_PATH:
+        try:
+            with open(_RULES_PATH, "w", encoding="utf-8") as f:
+                json.dump({"version": 1, "columns": rules}, f,
+                          ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+
+def add_column_rule(header, mode="full", type_label=None, grade="S"):
+    """'이 컬럼은 항상 이렇게 마스킹' 규칙 추가/갱신(같은 헤더는 덮어씀)."""
+    match = str(header).strip()
+    if not match:
+        return
+    mode = mode if mode in _MODE_FN else "full"
+    rules = [r for r in _load_rules() if r.get("match") != match]
+    rules.append({"match": match, "mode": mode,
+                  "type": type_label or match, "grade": grade})
+    _save_rules(rules)
+
+
+def remove_column_rule(header):
+    match = str(header).strip()
+    _save_rules([r for r in _load_rules() if r.get("match") != match])
+
+
+def org_column_masker(header):
+    """조직 규칙에 매칭되면 (유형, 등급, 마스크함수). 헤더 부분일치."""
+    h = str(header).replace(" ", "")
+    for r in _load_rules():
+        m = str(r.get("match", "")).replace(" ", "")
+        if m and m in h:
+            return (r.get("type", m), r.get("grade", "S"),
+                    _MODE_FN.get(r.get("mode", "full"), _mask_full))
+    return None
+
+
 def column_masker(header):
-    """헤더로 결정되는 (유형, 등급, 마스크함수) 또는 None."""
+    """헤더로 결정되는 (유형, 등급, 마스크함수) 또는 None.
+    조직 규칙(사용자 지정) > 내장 규칙 순으로 우선."""
+    org = org_column_masker(header)
+    if org:
+        return org
     h = str(header).replace(" ", "")
     for keys, typ, grade, fn in HEADER_RULES:
         if any(k.replace(" ", "") in h for k in keys):
@@ -440,7 +594,21 @@ def _rows_xls(raw):
 
 def _rows_html(raw):
     import pandas as pd
-    dfs = pd.read_html(io.BytesIO(raw), header=None)
+    # 한전 등 시스템이 .xls로 내보낸 파일이 실제로는 HTML <table>이고, 대개 cp949 인코딩이다.
+    # 바이트를 먼저 한글 인코딩으로 디코딩한 뒤 텍스트로 파싱한다(인코딩 오탐 방지).
+    text = None
+    for enc in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
+        try:
+            text = raw.decode(enc)
+            break
+        except Exception:
+            continue
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
+    try:
+        dfs = pd.read_html(io.StringIO(text), header=None, flavor="lxml")
+    except Exception:
+        dfs = pd.read_html(io.StringIO(text), header=None)   # 폴백(bs4/html5lib)
     if not dfs:
         raise ValueError("HTML에서 표를 찾지 못했습니다.")
     df = dfs[0]
@@ -449,6 +617,50 @@ def _rows_html(raw):
         out.append([(None if (v is None or (isinstance(v, float) and v != v)) else v)
                     for v in rec])
     return out
+
+
+def _rows_csv(raw):
+    """CSV 바이트 → 행 리스트. 한글 인코딩(utf-8-sig/cp949/euc-kr)·구분자 자동 추정."""
+    import csv
+    text = None
+    for enc in ("utf-8-sig", "cp949", "euc-kr", "utf-8"):
+        try:
+            text = raw.decode(enc)
+            break
+        except Exception:
+            continue
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    first = lines[0] if lines else ""
+    delim = max((",", ";", "\t", "|"), key=first.count)   # 첫 줄에서 가장 많은 구분자
+    if first.count(delim) == 0:
+        delim = ","
+    return [[(c if c != "" else None) for c in rec]
+            for rec in csv.reader(io.StringIO(text), delimiter=delim)]
+
+
+def read_csv_table(src):
+    """CSV 경로/바이트/파일객체 → Table."""
+    if isinstance(src, str):
+        with open(src, "rb") as f:
+            raw = f.read()
+    elif isinstance(src, (bytes, bytearray)):
+        raw = bytes(src)
+    else:
+        raw = src.read()
+    return _build_table(_rows_csv(raw)) if raw else Table([], [])
+
+
+def write_csv(dst, result_table):
+    """마스킹 결과를 CSV로 저장(입력이 CSV였던 경우 같은 형식 유지).
+    엑셀에서 한글이 깨지지 않도록 UTF-8 BOM(utf-8-sig)으로 기록."""
+    import csv
+    with open(dst, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow([("" if h is None else _cell(h)) for h in result_table.headers])
+        for r in result_table.rows:
+            w.writerow([("" if v is None else _cell(v)) for v in r])
 
 
 def _from_xlsx(raw):
@@ -466,8 +678,10 @@ def _from_html(raw):
 def read_table(src):
     """
     파일경로/바이트/파일객체 → Table. 확장자에 의존하지 않고 '실제 내용'으로 판별한다.
-    지원: 진짜 xlsx(zip) · 구형 .xls(OLE2) · HTML/XML 표로 위장된 엑셀.
+    지원: 진짜 xlsx(zip) · 구형 .xls(OLE2) · HTML/XML 표로 위장된 엑셀 · CSV.
     """
+    if isinstance(src, str) and src.lower().endswith(".csv"):
+        return read_csv_table(src)
     if isinstance(src, str):
         with open(src, "rb") as f:
             raw = f.read()
@@ -517,19 +731,14 @@ def _cell(v):
 
 
 def _scan_column(header, values, sample_size=200):
-    """한 컬럼 분석 → (grade, counts, whys, before, after). 헤더 규칙 우선, 없으면 셀 스캔."""
-    rule = column_masker(header)
-    name_col = is_name_column(header, values)
+    """한 컬럼 분석 → (grade, counts, whys, before, after).
+    전략: 헤더규칙 > 이름값 > 주소값 > 셀스캔 (resolve_strategy 참조)."""
+    strat = resolve_strategy(header, values)
     counts, whys, grades = {}, {}, set()
     before = after = ""
     for v in [x for x in values if x is not None][:sample_size]:
         s = str(v)
-        if rule:
-            typ, grade, fn = rule
-            masked = fn(s)
-            dets = [(typ, grade, "헤더(컬럼명) 기반 분류")] if masked != s else []
-        else:
-            masked, dets = mask_cell(s, name_col)
+        masked, dets = _apply_strategy(strat, s)
         if dets:
             for t, g, why in dets:
                 counts[t] = counts.get(t, 0) + 1
@@ -582,11 +791,8 @@ def mask_dataframe(table, targets, name_cols=None):
     반환: (result_table, report_rows, ref_rows)  ← 시트 기록용 행 리스트(헤더 포함)
     """
     idx_of = {t: table.col_index(t) for t in targets if t in table.headers}
-    # 컬럼별 처리 계획: 헤더 규칙('h') 우선, 없으면 셀 스캔('c')
-    plan = {}
-    for t in idx_of:
-        rule = column_masker(t)
-        plan[t] = ("h", rule) if rule else ("c", is_name_column(t, table.column(t)))
+    # 컬럼별 처리 전략(설명가능): 헤더규칙 > 이름값 > 주소값 > 셀스캔
+    plan = {t: resolve_strategy(t, table.column(t)) for t in idx_of}
     counts = {t: {} for t in idx_of}
     whys = {t: {} for t in idx_of}
 
@@ -597,22 +803,12 @@ def mask_dataframe(table, targets, name_cols=None):
             v = row[i] if i < len(row) else None
             if v is None:
                 continue
-            s = str(v)
-            mode = plan[t]
-            if mode[0] == "h":
-                typ, _grade, fn = mode[1]
-                masked = fn(s)
-                if masked != s:
-                    nr[i] = masked
+            masked, dets = _apply_strategy(plan[t], str(v))
+            if dets:
+                nr[i] = masked
+                for typ, _g, why in dets:
                     counts[t][typ] = counts[t].get(typ, 0) + 1
-                    whys[t].setdefault(typ, "헤더(컬럼명) 기반 분류")
-            else:
-                masked, dets = mask_cell(s, mode[1])
-                if dets:
-                    nr[i] = masked
-                    for typ, _g, why in dets:
-                        counts[t][typ] = counts[t].get(typ, 0) + 1
-                        whys[t].setdefault(typ, why)
+                    whys[t].setdefault(typ, why)
         new_rows.append(nr)
     result = Table(table.headers, new_rows)
 
