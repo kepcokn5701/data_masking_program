@@ -16,7 +16,7 @@ from masking_engine import (
     STANDARD_NAME, STANDARD_TIMELINE, GUIDE_NOTE, TREND_NOTES,
     GRADE_LABEL, GRADE_COLOR, GRADE_POLICY, GRADE_DEF, RISK_HIGH,
     read_table, analyze_dataframe, mask_dataframe, write_workbook, count_detections,
-    MODE_LABEL, list_rules, add_column_rule, remove_column_rule,
+    MODE_LABEL, list_rules, add_column_rule, remove_column_rule, preview_mask,
 )
 
 
@@ -224,8 +224,14 @@ class MaskingApp(tk.Tk):
                 tk.Label(row, text=f"‘{r.get('match','')}’ 칸", width=22, anchor="w",
                          font=("맑은 고딕", 9, "bold"), bg="#f8fafc").pack(side="left", padx=4)
                 tk.Label(row, text="→ " + MODE_LABEL.get(r.get("mode", "full"), "전체 가림"),
-                         width=16, anchor="w", font=("맑은 고딕", 8),
+                         width=14, anchor="w", font=("맑은 고딕", 8),
                          fg="#475569", bg="#f8fafc").pack(side="left")
+                # 예전에 정해 둔 규칙도 '어떻게 보이는지' 바로 알 수 있게 예시를 붙인다
+                ex = sample_value(r.get("match", ""))
+                if ex:
+                    tk.Label(row, text=f"{ex[:12]} → {preview_mask(ex, r.get('mode','full'))[:12]}",
+                             anchor="w", font=("맑은 고딕", 8),
+                             fg="#16a34a", bg="#f8fafc").pack(side="left", padx=2)
                 tk.Button(row, text="삭제", command=lambda m=r.get("match"): (
                               remove_column_rule(m), refresh()),
                           bg="#fee2e2", fg="#b91c1c", relief="flat",
@@ -249,7 +255,38 @@ class MaskingApp(tk.Tk):
         tk.Label(addfrm, text="방식", font=("맑은 고딕", 8), bg="#ffffff").grid(row=0, column=2, padx=2)
         mode_var = tk.StringVar(value=MODE_LABEL["full"])
         ttk.Combobox(addfrm, textvariable=mode_var, values=list(MODE_LABEL.values()),
-                     width=12, state="readonly").grid(row=0, column=3, padx=4)
+                     width=14, state="readonly").grid(row=0, column=3, padx=4)
+
+        # ── 결과 미리보기 ────────────────────────────────────────
+        # 방식 이름('숫자만 가림')만 봐서는 결과가 어떻게 될지 알 수 없다.
+        # 그래서 지금 열린 파일에서 그 칸의 '진짜 값'을 하나 가져와,
+        # 고른 방식을 적용하면 어떻게 보이는지 그 자리에서 보여준다.
+        preview = tk.Label(addfrm, text="", font=("맑은 고딕", 9), anchor="w",
+                           bg="#ffffff", justify="left")
+        preview.grid(row=1, column=0, columnspan=5, sticky="w", pady=(8, 0))
+
+        def sample_value(header):
+            """열린 파일에서 그 칸의 비어 있지 않은 첫 값 하나. 없으면 None."""
+            if self.table is None or header not in self.table.headers:
+                return None
+            for v in self.table.column(header):
+                if v is not None and str(v).strip() not in ("", "-"):
+                    return str(v)
+            return None
+
+        def refresh_preview(*_):
+            """칸이나 방식을 바꿀 때마다 '원래값 → 가린값' 을 다시 그린다."""
+            val = sample_value(col_var.get().strip())
+            if not val:
+                preview.config(text="미리보기: 파일을 열면 이 칸의 실제 값으로 보여드립니다.",
+                               fg="#94a3b8")
+                return
+            after = preview_mask(val, label2mode.get(mode_var.get(), "full")) or val
+            preview.config(text=f"미리보기:   {val[:22]}   →   {after[:22]}", fg="#16a34a")
+
+        col_var.trace_add("write", refresh_preview)
+        mode_var.trace_add("write", refresh_preview)
+        refresh_preview()
 
         def do_add():
             header = col_var.get().strip()

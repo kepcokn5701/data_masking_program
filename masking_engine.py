@@ -422,6 +422,17 @@ MODE_LABEL = {                   # GUI 표시용
     "phone": "전화번호식", "email": "이메일식", "address": "주소식",
     "birth": "생년월일식", "vehicle": "차량번호식", "passport": "여권식",
 }
+
+def preview_mask(value, mode):
+    """'이 값에 이 방식을 쓰면 이렇게 보입니다' 미리보기 문자열.
+    화면에서 방식을 고를 때 결과를 눈으로 확인시켜 주기 위한 용도.
+    값이 없거나 모르는 방식이면 빈 문자열."""
+    fn = _MODE_FN.get(mode)
+    if fn is None or value is None or str(value).strip() == "":
+        return ""
+    return fn(str(value))
+
+
 _RULES_PATH = None
 _RULES_CACHE = None
 
