@@ -25,6 +25,7 @@ from datetime import datetime, timezone, timedelta
 from masking_engine import (
     read_table, analyze_dataframe, mask_dataframe,
     write_workbook, write_csv, count_detections, set_rules_path,
+    list_rules, add_column_rule, remove_column_rule, MODE_LABEL,
 )
 
 KST = timezone(timedelta(hours=9))
@@ -174,7 +175,75 @@ def mask_file(path):
     return 0
 
 
+# ── 규칙 조작 명령 (AI 비서가 붙는 자리) ─────────────────────────
+# 직원이 "고객번호는 뒤 4자리는 남겨줘" 라고 말하면, AI 비서는 아래 명령 한 줄만 실행한다.
+#   python mask_cli.py rules add 고객번호 last4
+# 엑셀 '내용'은 AI에게 전혀 넘어가지 않는다 — AI는 '규칙'만 만들고,
+# 실제 마스킹은 지금까지처럼 이 PC 안의 엔진이 수행한다.
+# 결과를 JSON으로 출력하는 이유: 사람도 읽을 수 있고, AI도 그대로 해석할 수 있어서.
+
+def _out(obj):
+    """결과를 UTF-8 JSON 한 덩어리로 출력(한글이 깨지지 않게)."""
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")   # 윈도우 콘솔 한글 깨짐 방지
+    except Exception:
+        pass
+    print(json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def rules_command(argv):
+    """rules list | add <칸이름> <방식> | remove <칸이름>  → 성공 0, 실패 2"""
+    action = argv[0] if argv else "list"
+
+    if action == "list":
+        _out({"ok": True,
+              "rules": list_rules(),                 # 지금 저장된 규칙들
+              "modes": MODE_LABEL})                   # 고를 수 있는 방식 목록(코드: 설명)
+        return 0
+
+    if action == "add":
+        if len(argv) < 3:
+            _out({"ok": False,
+                  "error": "사용법: rules add <칸이름> <방식>",
+                  "modes": MODE_LABEL})
+            return 2
+        header, mode = argv[1], argv[2]
+        if mode not in MODE_LABEL:                    # 없는 방식이면 조용히 'full'로 바뀌지 않도록 먼저 막는다
+            _out({"ok": False,
+                  "error": f"'{mode}' 는 없는 방식입니다.",
+                  "modes": MODE_LABEL})
+            return 2
+        add_column_rule(header, mode=mode)
+        _out({"ok": True,
+              "message": f"‘{header}’ 칸을 앞으로 ‘{MODE_LABEL[mode]}’ 방식으로 가립니다.",
+              "rules": list_rules()})
+        return 0
+
+    if action == "remove":
+        if len(argv) < 2:
+            _out({"ok": False, "error": "사용법: rules remove <칸이름>"})
+            return 2
+        header = argv[1]
+        before = {r.get("match") for r in list_rules()}
+        if header not in before:
+            _out({"ok": False, "error": f"‘{header}’ 규칙이 없습니다.",
+                  "rules": list_rules()})
+            return 2
+        remove_column_rule(header)
+        _out({"ok": True, "message": f"‘{header}’ 규칙을 지웠습니다.",
+              "rules": list_rules()})
+        return 0
+
+    _out({"ok": False, "error": f"모르는 명령: {action}",
+          "usage": ["rules list", "rules add <칸이름> <방식>", "rules remove <칸이름>"]})
+    return 2
+
+
 def main():
+    # 첫 인자가 'rules' 면 규칙 관리 모드 (그 외에는 지금까지처럼 파일 마스킹)
+    if len(sys.argv) >= 2 and sys.argv[1] == "rules":
+        return rules_command(sys.argv[2:])
+
     if len(sys.argv) < 2:
         _dialog("warn", "사용법",
                 "엑셀 파일을 우클릭 → '개인정보 마스킹본 만들기' 로 실행하세요.\n"
