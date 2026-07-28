@@ -44,6 +44,13 @@ POLL_SEC = 3
 state = {"paused": False, "running": True, "done": 0}
 _seen = {}     # {path: 직전 폴링 크기} — 복사 중 파일 거르기
 
+# ── 최초 실행 표시 파일 ────────────────────────────────────────
+# 이 앱은 트레이(시계 옆)에 조용히 상주해서, 실행해도 창이 뜨지 않는다.
+# 그 탓에 직원들이 '프로그램이 켜지긴 한 건가?' 하고 알아채지 못했다.
+# → 처음 한 번만 사용설명서를 자동으로 띄워 '켜졌다'는 걸 눈으로 알려준다.
+#   (파일 하나로 기억하므로 두 번째부터는 뜨지 않는다. 지우면 다시 뜬다.)
+FIRST_RUN_FLAG = os.path.join(_data_dir(), "최초실행안내완료.txt")
+
 
 # ── 트레이 아이콘 그림 ─────────────────────────────────────────
 def _icon_image(active=True):
@@ -202,6 +209,31 @@ def main():
     )
     threading.Thread(target=icon.run, daemon=True).start()
     threading.Thread(target=_watch_loop, args=(icon,), daemon=True).start()
+
+    # ── 처음 실행이면 사용설명서를 자동으로 띄운다 ─────────────────
+    # 트레이 상주앱이라 실행해도 화면에 아무 변화가 없어서, 직원들이
+    # 켜진 줄 모르고 그냥 지나쳤다. 처음 한 번은 설명서를 열어 알려준다.
+    def _first_run_guide():
+        if os.path.exists(FIRST_RUN_FLAG):
+            return                                   # 이미 안내했음 → 조용히 넘어감
+        try:
+            import make_manual
+            make_manual.open_manual()                # 설명서 HTML 생성 후 브라우저로 열기
+            _notify(icon, "엑셀파일 개인정보 마스킹 — 설치 완료",
+                    "시계 옆 트레이에 상주합니다.\n"
+                    "아이콘을 클릭하면 마스킹 도구가 열립니다.")
+        except Exception as e:
+            # 설명서를 못 열어도 최소한 '켜졌다'는 것은 알려야 한다
+            _notify(icon, "엑셀파일 개인정보 마스킹 실행됨",
+                    f"시계 옆 트레이 아이콘을 클릭해 사용하세요.\n(설명서 열기 실패: {e})")
+        try:
+            with open(FIRST_RUN_FLAG, "w", encoding="utf-8") as f:
+                f.write("이 파일이 있으면 최초 실행 안내를 다시 띄우지 않습니다.\n"
+                        "설명서를 다시 보려면 트레이 아이콘 우클릭 → '사용설명서 열기'.\n")
+        except Exception:
+            pass                                     # 기록 실패가 실행을 막지는 않도록
+
+    app.after(1500, _first_run_guide)                # 트레이 아이콘이 뜬 뒤 안내
     app.mainloop()
 
 
