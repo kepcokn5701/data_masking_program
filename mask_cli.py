@@ -25,7 +25,7 @@ from datetime import datetime, timezone, timedelta
 from masking_engine import (
     read_table, analyze_dataframe, mask_dataframe,
     write_workbook, write_csv, count_detections, set_rules_path,
-    list_rules, add_column_rule, remove_column_rule, MODE_LABEL,
+    list_rules, add_column_rule, remove_column_rule, MODE_SPECS, describe_mode,
 )
 
 KST = timezone(timedelta(hours=9))
@@ -191,6 +191,22 @@ def _out(obj):
     print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
+def _mode_catalog():
+    """고를 수 있는 방식 목록 + 각 방식이 요구하는 조절값 설명.
+    AI 비서가 이걸 읽고 '어떤 방식에 무슨 값을 넣어야 하는지' 알 수 있도록 한다."""
+    out = {}
+    for key, spec in MODE_SPECS.items():
+        item = {"설명": spec["label"],
+                "갈래": "글자 가리기" if spec["kind"] == "mask" else "숫자 가상화"}
+        if spec["params"]:
+            p = spec["params"][0]
+            item["조절값"] = {"이름": p["key"], "설명": p["label"],
+                            "기본값": p["default"],
+                            "범위": [p["min"], p["max"]]}
+        out[key] = item
+    return out
+
+
 def rules_command(argv):
     """rules list | add <칸이름> <방식> | remove <칸이름>  → 성공 0, 실패 2"""
     action = argv[0] if argv else "list"
@@ -198,24 +214,43 @@ def rules_command(argv):
     if action == "list":
         _out({"ok": True,
               "rules": list_rules(),                 # 지금 저장된 규칙들
-              "modes": MODE_LABEL})                   # 고를 수 있는 방식 목록(코드: 설명)
+              "modes": _mode_catalog()})              # 고를 수 있는 방식 + 조절값 설명
         return 0
 
     if action == "add":
         if len(argv) < 3:
             _out({"ok": False,
-                  "error": "사용법: rules add <칸이름> <방식>",
-                  "modes": MODE_LABEL})
+                  "error": "사용법: rules add <칸이름> <방식> [조절값]",
+                  "modes": _mode_catalog()})
             return 2
         header, mode = argv[1], argv[2]
-        if mode not in MODE_LABEL:                    # 없는 방식이면 조용히 'full'로 바뀌지 않도록 먼저 막는다
+        if mode not in MODE_SPECS:                    # 없는 방식이면 조용히 'full'로 바뀌지 않도록 먼저 막는다
             _out({"ok": False,
                   "error": f"'{mode}' 는 없는 방식입니다.",
-                  "modes": MODE_LABEL})
+                  "modes": _mode_catalog()})
             return 2
-        add_column_rule(header, mode=mode)
+
+        # 조절값: 네 번째 인자로 숫자 하나를 받는다 (예: rules add 사용량 noise 10)
+        options = {}
+        params = MODE_SPECS[mode]["params"]
+        if params:
+            p = params[0]
+            raw = argv[3] if len(argv) > 3 else str(p["default"])
+            try:
+                options[p["key"]] = type(p["default"])(raw)
+            except (TypeError, ValueError):
+                _out({"ok": False,
+                      "error": f"‘{p['label']}’ 은(는) 숫자여야 합니다: '{raw}'",
+                      "expects": p})
+                return 2
+        elif len(argv) > 3:
+            _out({"ok": False,
+                  "error": f"'{mode}' 방식은 조절값이 없습니다."})
+            return 2
+
+        add_column_rule(header, mode=mode, options=options)
         _out({"ok": True,
-              "message": f"‘{header}’ 칸을 앞으로 ‘{MODE_LABEL[mode]}’ 방식으로 가립니다.",
+              "message": f"‘{header}’ 칸을 앞으로 ‘{describe_mode(mode, options)}’ 방식으로 처리합니다.",
               "rules": list_rules()})
         return 0
 

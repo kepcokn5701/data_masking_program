@@ -16,7 +16,8 @@ from masking_engine import (
     STANDARD_NAME, STANDARD_TIMELINE, GUIDE_NOTE, TREND_NOTES,
     GRADE_LABEL, GRADE_COLOR, GRADE_POLICY, GRADE_DEF, RISK_HIGH,
     read_table, analyze_dataframe, mask_dataframe, write_workbook, count_detections,
-    MODE_LABEL, list_rules, add_column_rule, remove_column_rule, preview_mask,
+    MODE_LABEL, MODE_SPECS, list_rules, add_column_rule, remove_column_rule,
+    preview_mask, describe_mode,
 )
 
 
@@ -223,13 +224,16 @@ class MaskingApp(tk.Tk):
                 row.pack(fill="x", pady=1)
                 tk.Label(row, text=f"‘{r.get('match','')}’ 칸", width=22, anchor="w",
                          font=("맑은 고딕", 9, "bold"), bg="#f8fafc").pack(side="left", padx=4)
-                tk.Label(row, text="→ " + MODE_LABEL.get(r.get("mode", "full"), "전체 가림"),
-                         width=14, anchor="w", font=("맑은 고딕", 8),
+                # 방식 이름 + 조절값을 함께 보여준다 ('뒤 N자리만 남김 (4)')
+                tk.Label(row, text="→ " + describe_mode(r.get("mode", "full"),
+                                                        r.get("options")),
+                         width=20, anchor="w", font=("맑은 고딕", 8),
                          fg="#475569", bg="#f8fafc").pack(side="left")
                 # 예전에 정해 둔 규칙도 '어떻게 보이는지' 바로 알 수 있게 예시를 붙인다
                 ex = sample_value(r.get("match", ""))
                 if ex:
-                    tk.Label(row, text=f"{ex[:12]} → {preview_mask(ex, r.get('mode','full'))[:12]}",
+                    out = preview_mask(ex, r.get("mode", "full"), r.get("options"))
+                    tk.Label(row, text=f"{ex[:12]} → {out[:12]}",
                              anchor="w", font=("맑은 고딕", 8),
                              fg="#16a34a", bg="#f8fafc").pack(side="left", padx=2)
                 tk.Button(row, text="삭제", command=lambda m=r.get("match"): (
@@ -257,13 +261,27 @@ class MaskingApp(tk.Tk):
         ttk.Combobox(addfrm, textvariable=mode_var, values=list(MODE_LABEL.values()),
                      width=14, state="readonly").grid(row=0, column=3, padx=4)
 
+        # ── 조절값 입력칸 ────────────────────────────────────────
+        # 방식마다 조절할 것이 다르다(뒤 몇 자리 / 오차 몇 % / 몇 단위).
+        # 고른 방식에 조절값이 있으면 이 줄이 나타나고, 없으면 숨는다.
+        optfrm = tk.Frame(addfrm, bg="#ffffff")
+        optfrm.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        opt_label = tk.Label(optfrm, text="", font=("맑은 고딕", 8), bg="#ffffff")
+        opt_label.pack(side="left", padx=(2, 4))
+        opt_var = tk.StringVar()
+        tk.Entry(optfrm, textvariable=opt_var, width=8,
+                 justify="right").pack(side="left")
+        opt_hint = tk.Label(optfrm, text="", font=("맑은 고딕", 8),
+                            fg="#94a3b8", bg="#ffffff")
+        opt_hint.pack(side="left", padx=(4, 0))
+
         # ── 결과 미리보기 ────────────────────────────────────────
-        # 방식 이름('숫자만 가림')만 봐서는 결과가 어떻게 될지 알 수 없다.
+        # 방식 이름('숫자 전부 가림')만 봐서는 결과가 어떻게 될지 알 수 없다.
         # 그래서 지금 열린 파일에서 그 칸의 '진짜 값'을 하나 가져와,
-        # 고른 방식을 적용하면 어떻게 보이는지 그 자리에서 보여준다.
+        # 고른 방식과 조절값을 적용하면 어떻게 보이는지 그 자리에서 보여준다.
         preview = tk.Label(addfrm, text="", font=("맑은 고딕", 9), anchor="w",
                            bg="#ffffff", justify="left")
-        preview.grid(row=1, column=0, columnspan=5, sticky="w", pady=(8, 0))
+        preview.grid(row=2, column=0, columnspan=5, sticky="w", pady=(8, 0))
 
         def sample_value(header):
             """열린 파일에서 그 칸의 비어 있지 않은 첫 값 하나. 없으면 None."""
@@ -274,26 +292,65 @@ class MaskingApp(tk.Tk):
                     return str(v)
             return None
 
+        def current_mode():
+            return label2mode.get(mode_var.get(), "full")
+
+        def current_params():
+            """고른 방식이 요구하는 조절값 정의 목록(없으면 빈 목록)."""
+            return MODE_SPECS.get(current_mode(), {}).get("params", [])
+
+        def current_options():
+            """화면에 입력된 조절값 → {"keep": 4} 같은 형태로."""
+            params = current_params()
+            if not params:
+                return {}
+            p = params[0]                       # 방식마다 조절값은 현재 1개
+            try:
+                return {p["key"]: type(p["default"])(opt_var.get().strip())}
+            except (TypeError, ValueError):
+                return {p["key"]: p["default"]}   # 잘못 입력하면 기본값으로
+
+        def on_mode_change(*_):
+            """방식을 바꾸면 조절값 칸을 그 방식에 맞게 갈아끼운다."""
+            params = current_params()
+            if not params:
+                optfrm.grid_remove()            # 조절할 게 없는 방식이면 줄을 숨김
+                refresh_preview()
+                return
+            p = params[0]
+            opt_label.config(text=f"{p['label']} :")
+            opt_hint.config(text=f"({p['min']} ~ {p['max']} 사이)")
+            opt_var.set(str(p["default"]))      # 방식이 바뀌면 기본값으로 되돌림
+            optfrm.grid()
+            refresh_preview()
+
         def refresh_preview(*_):
-            """칸이나 방식을 바꿀 때마다 '원래값 → 가린값' 을 다시 그린다."""
+            """칸·방식·조절값 중 무엇이 바뀌든 '원래값 → 바뀐값' 을 다시 그린다."""
             val = sample_value(col_var.get().strip())
             if not val:
                 preview.config(text="미리보기: 파일을 열면 이 칸의 실제 값으로 보여드립니다.",
                                fg="#94a3b8")
                 return
-            after = preview_mask(val, label2mode.get(mode_var.get(), "full")) or val
+            mode, opts = current_mode(), current_options()
+            if mode == "noise":
+                # 무작위 오차는 '줄마다 값이 다르다'는 게 핵심이라 여러 개를 보여준다
+                outs = " / ".join(preview_mask(val, mode, opts) for _ in range(3))
+                preview.config(text=f"미리보기:   {val[:14]}   →   {outs[:40]}", fg="#16a34a")
+                return
+            after = preview_mask(val, mode, opts) or val
             preview.config(text=f"미리보기:   {val[:22]}   →   {after[:22]}", fg="#16a34a")
 
         col_var.trace_add("write", refresh_preview)
-        mode_var.trace_add("write", refresh_preview)
-        refresh_preview()
+        opt_var.trace_add("write", refresh_preview)
+        mode_var.trace_add("write", on_mode_change)
+        on_mode_change()
 
         def do_add():
             header = col_var.get().strip()
             if not header:
                 messagebox.showwarning("알림", "컬럼명을 입력/선택해 주세요.", parent=win)
                 return
-            add_column_rule(header, mode=label2mode.get(mode_var.get(), "full"))
+            add_column_rule(header, mode=current_mode(), options=current_options())
             refresh()
             if self.table is not None:      # 열린 파일이 있으면 즉시 반영
                 self._analyze_and_render()

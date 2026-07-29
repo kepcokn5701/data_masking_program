@@ -17,6 +17,7 @@ import io
 import os
 import re
 import json
+import random
 from datetime import datetime, date, time
 import openpyxl
 
@@ -47,20 +48,91 @@ def _mask_all_digits(seg):
     """숫자만 전부 * (구분자·기호는 유지) → 주민/카드/계좌/면허"""
     return re.sub(r"\d", "*", seg)
 
-def _mask_keep_last4(seg):
-    """뒤 4자리만 남기고 앞쪽 숫자를 모두 가린다 → 고객번호·계약번호 등 '업무용 식별번호'.
+def _mask_keep_last(seg, keep=4):
+    """뒤 keep자리만 남기고 앞쪽 숫자를 모두 가린다 → 고객번호·계약번호 등 '업무용 식별번호'.
+
+    keep(남길 자릿수)은 칸마다 다르게 정할 수 있다.
+    자릿수가 짧은 칸(사업소코드 5자리)에 4를 쓰면 한 자리만 가려져 의미가 없으므로,
+    쓰는 사람이 칸에 맞게 조절해야 한다.
 
     왜 전부 가리지 않는가:
       전부 가리면(**-****-****) 파일을 넘겨받은 담당자조차 어느 줄이 누구인지 구분할 수 없어
       '지원금 받은 고객 / 안 받은 고객' 같은 대조 업무 자체가 불가능해진다.
       원본을 알아볼 수는 없게 하되, 줄과 줄을 구분할 최소한의 꼬리표는 남긴다.
 
-    예) 0912345678 → ******5678,  99-1234-5678 → **-****-5678
+    예) keep=4 → 0912345678 → ******5678,  99-1234-5678 → **-****-5678
     앞 2자리(사업소·지역 코드)까지 가리므로 지역이 드러나지 않는다.
-    숫자가 4자리 이하면 남길 게 없어 그대로 둔다(그 정도로는 개인이 특정되지 않음).
+    숫자가 keep자리 이하면 남길 게 없어 그대로 둔다.
     """
-    # '뒤에 숫자가 4개 이상 남아 있는 숫자'만 * 로 바꾼다 → 마지막 4자리는 자동으로 보존
-    return re.sub(r"\d(?=(?:\D*\d){4})", "*", seg)
+    keep = max(0, int(keep))
+    if keep == 0:
+        return _mask_all_digits(seg)          # 0자리 남김 = 전부 가림
+    # '뒤에 숫자가 keep개 이상 남아 있는 숫자'만 * 로 → 마지막 keep자리는 자동 보존
+    return re.sub(r"\d(?=(?:\D*\d){%d})" % keep, "*", seg)
+
+
+def _mask_keep_last4(seg):
+    """헤더 규칙(고객번호)용 기본값 4자리 버전."""
+    return _mask_keep_last(seg, 4)
+
+
+# ── 숫자 가상화 함수들 (마스킹이 아니라 '분석 가능한 가짜 값'을 만든다) ──
+# 마스킹은 값을 지우지만, 가상화는 값을 '비슷하지만 다른 값'으로 바꾼다.
+# 그래야 평균·추세 분석은 되면서 개별 고객의 실제 값은 알 수 없다.
+
+def _to_number(s):
+    """'1,234.5 kWh' 처럼 단위·쉼표가 붙어 있어도 숫자 부분만 뽑아낸다.
+    반환: (숫자, 앞부분, 뒷부분, 원래표기) — 숫자가 없으면 (None, '', '', '').
+    원래표기를 함께 돌려주는 이유: 소수 자릿수·쉼표를 그대로 맞춰 주기 위해서."""
+    m = re.search(r"-?\d[\d,]*\.?\d*", str(s))
+    if not m:
+        return None, "", "", ""
+    raw = m.group()
+    try:
+        num = float(raw.replace(",", ""))
+    except ValueError:
+        return None, "", "", ""
+    return num, str(s)[:m.start()], str(s)[m.end():], raw
+
+
+def _fmt_number(num, raw):
+    """바뀐 숫자를 원본과 같은 모양으로 되돌린다.
+    raw는 '단위가 붙기 전 숫자 부분'이어야 한다('1,234.5' O / '1,234.5 kWh' X).
+      1,234.5 → 1,128.3 (소수 1자리·쉼표 유지) / 350 → 321 (정수는 정수로)"""
+    comma = "," in raw
+    if "." in raw:
+        digits = len(raw.rsplit(".", 1)[1])
+        return f"{num:,.{digits}f}" if comma else f"{num:.{digits}f}"
+    return f"{round(num):,}" if comma else str(int(round(num)))
+
+
+def _noise(seg, percent=10, rng=None):
+    """행마다 다른 무작위 오차를 준다 (±percent%).
+
+    ※ 모든 값에 똑같이 +10% 하면 나눠서 되돌릴 수 있으므로 위험하다.
+      한 줄은 +7%, 다음 줄은 -4% 식으로 '제각각' 흔들어야 복원이 불가능해지고,
+      그러면서도 전체 평균·추세는 거의 그대로 보존된다.
+    """
+    num, pre, post, raw = _to_number(seg)
+    if num is None:
+        return seg
+    r = rng or random
+    factor = 1 + r.uniform(-percent, percent) / 100.0
+    return pre + _fmt_number(num * factor, raw) + post
+
+
+def _round_unit(seg, unit=5):
+    """구간으로 뭉갠다 (unit 단위로 반올림). 3kW·7kW → 5kW·5kW.
+    개별 값을 뭉뚱그려 같은 값이 여럿 되게 만들어 개인 특정을 어렵게 한다."""
+    num, pre, post, raw = _to_number(seg)
+    if num is None or unit <= 0:
+        return seg
+    return pre + _fmt_number(round(num / unit) * unit, raw) + post
+
+
+def _keep_as_is(seg):
+    """그대로 두기 — '이 칸은 건드리지 않는다'를 규칙으로 명시할 때."""
+    return seg
 
 def _mask_passport(seg):
     """여권번호: 앞 1글자만 남기고 마스킹 (M12345678 → M********)"""
@@ -404,33 +476,101 @@ HEADER_RULES = [
 # "언제까지 한전 컬럼을 뽑을 수 없다" → 내장 규칙에 없는 사내 고유 컬럼은
 # 사용자가 GUI에서 한 번 지정하면 masking_rules.json 에 저장되어 다음부터 자동 적용된다.
 # 내장 규칙보다 '우선'한다(사용자 명시 의도 존중).
-_MODE_FN = {
-    "full": _mask_full,          # 전체 가림 (상호·사유 등)
-    "digits": _mask_all_digits,  # 숫자 전부 가림 (주민·계좌 등 되살리면 안 되는 번호)
-    "last4": _mask_keep_last4,   # 뒤 4자리만 남김 (고객번호·계약번호 등 대조가 필요한 번호)
-    "name": _mask_name,
-    "phone": _mask_phone,
-    "email": _mask_email,
-    "address": _mask_address,
-    "birth": _mask_birth,
-    "vehicle": _mask_vehicle,
-    "passport": _mask_passport,
-}
-MODE_LABEL = {                   # GUI 표시용
-    "full": "전체 가림", "digits": "숫자만 가림", "last4": "뒤 4자리만 남김",
-    "name": "이름식(홍*동)",
-    "phone": "전화번호식", "email": "이메일식", "address": "주소식",
-    "birth": "생년월일식", "vehicle": "차량번호식", "passport": "여권식",
+# 각 방식은 (설명, 처리함수, 조절값 목록) 을 갖는다.
+#   params: 사용자가 화면에서 직접 넣는 조절값. 없으면 빈 목록.
+#     key=저장될 이름 / label=화면 문구 / default=기본값 / min·max=허용 범위
+# kind: "mask"(글자 가리기) / "synth"(숫자를 가짜 값으로) — 화면에서 갈래를 나눠 보여주기 위함
+MODE_SPECS = {
+    # ── 글자 가리기 ──────────────────────────────────────────
+    "full":   {"label": "전체 가림", "kind": "mask", "params": [],
+               "fn": lambda s, o: _mask_full(s)},
+    "digits": {"label": "숫자 전부 가림", "kind": "mask", "params": [],
+               "fn": lambda s, o: _mask_all_digits(s)},
+    "last":   {"label": "뒤 N자리만 남김", "kind": "mask",
+               "params": [{"key": "keep", "label": "남길 자릿수",
+                           "default": 4, "min": 0, "max": 12}],
+               "fn": lambda s, o: _mask_keep_last(s, o.get("keep", 4))},
+    "name":   {"label": "이름식(홍*동)", "kind": "mask", "params": [],
+               "fn": lambda s, o: _mask_name(s)},
+    "phone":  {"label": "전화번호식", "kind": "mask", "params": [],
+               "fn": lambda s, o: _mask_phone(s)},
+    "email":  {"label": "이메일식", "kind": "mask", "params": [],
+               "fn": lambda s, o: _mask_email(s)},
+    "address": {"label": "주소식", "kind": "mask", "params": [],
+                "fn": lambda s, o: _mask_address(s)},
+    "birth":  {"label": "생년월일식", "kind": "mask", "params": [],
+               "fn": lambda s, o: _mask_birth(s)},
+    "vehicle": {"label": "차량번호식", "kind": "mask", "params": [],
+                "fn": lambda s, o: _mask_vehicle(s)},
+    "passport": {"label": "여권식", "kind": "mask", "params": [],
+                 "fn": lambda s, o: _mask_passport(s)},
+    # ── 숫자를 가짜 값으로 (분석은 되고 원본은 모르게) ──────────
+    "noise":  {"label": "무작위 오차 ±N%", "kind": "synth",
+               "params": [{"key": "percent", "label": "오차 범위(%)",
+                           "default": 10, "min": 1, "max": 90}],
+               "fn": lambda s, o: _noise(s, o.get("percent", 10))},
+    "round":  {"label": "N단위로 뭉개기", "kind": "synth",
+               "params": [{"key": "unit", "label": "묶는 단위",
+                           "default": 5, "min": 1, "max": 100000}],
+               "fn": lambda s, o: _round_unit(s, o.get("unit", 5))},
+    "keep":   {"label": "그대로 두기", "kind": "synth", "params": [],
+               "fn": lambda s, o: _keep_as_is(s)},
 }
 
-def preview_mask(value, mode):
+# 예전 규칙 파일과의 호환 — 옛 방식 이름 → (새 이름, 설정값)
+# 이미 저장된 {"mode": "last4"} 규칙이 계속 동작하도록 한다.
+_MODE_ALIAS = {"last4": ("last", {"keep": 4})}
+
+MODE_LABEL = {k: v["label"] for k, v in MODE_SPECS.items()}   # 화면 표시용
+
+
+def resolve_mode(mode, options=None):
+    """옛 이름·빠진 설정값을 정리해 (방식이름, 설정값dict) 로 돌려준다.
+    저장된 규칙을 실제로 적용하기 직전에 항상 이 함수를 거친다."""
+    opts = dict(options or {})
+    if mode in _MODE_ALIAS:                    # 옛 이름이면 새 이름 + 기본 설정으로
+        mode, preset = _MODE_ALIAS[mode]
+        for k, v in preset.items():
+            opts.setdefault(k, v)
+    if mode not in MODE_SPECS:
+        mode = "full"
+    for p in MODE_SPECS[mode]["params"]:       # 빠진 설정값은 기본값으로 채우고
+        v = opts.get(p["key"], p["default"])
+        try:
+            v = type(p["default"])(v)
+        except (TypeError, ValueError):
+            v = p["default"]
+        opts[p["key"]] = min(max(v, p["min"]), p["max"])   # 범위를 벗어나면 잘라낸다
+    return mode, opts
+
+
+def mode_function(mode, options=None):
+    """(방식, 설정값) → 셀 값 하나를 처리하는 함수. 설정값이 함수 안에 박혀 나온다."""
+    mode, opts = resolve_mode(mode, options)
+    fn = MODE_SPECS[mode]["fn"]
+    return lambda s: fn(s, opts)
+
+
+def describe_mode(mode, options=None):
+    """'뒤 N자리만 남김 (4)' 처럼 방식과 조절값을 한 줄로 표현. 화면·로그 표시용."""
+    mode, opts = resolve_mode(mode, options)
+    spec = MODE_SPECS[mode]
+    if not spec["params"]:
+        return spec["label"]
+    p = spec["params"][0]
+    return f"{spec['label']} ({opts.get(p['key'], p['default'])})"
+
+
+def preview_mask(value, mode, options=None):
     """'이 값에 이 방식을 쓰면 이렇게 보입니다' 미리보기 문자열.
-    화면에서 방식을 고를 때 결과를 눈으로 확인시켜 주기 위한 용도.
-    값이 없거나 모르는 방식이면 빈 문자열."""
-    fn = _MODE_FN.get(mode)
-    if fn is None or value is None or str(value).strip() == "":
+    화면에서 방식·조절값을 바꿀 때 결과를 눈으로 확인시켜 주기 위한 용도.
+    값이 없으면 빈 문자열."""
+    if value is None or str(value).strip() == "":
         return ""
-    return fn(str(value))
+    try:
+        return mode_function(mode, options)(str(value))
+    except Exception:
+        return ""
 
 
 _RULES_PATH = None
@@ -475,14 +615,15 @@ def _save_rules(rules):
             pass
 
 
-def add_column_rule(header, mode="full", type_label=None, grade="S"):
-    """'이 컬럼은 항상 이렇게 마스킹' 규칙 추가/갱신(같은 헤더는 덮어씀)."""
+def add_column_rule(header, mode="full", type_label=None, grade="S", options=None):
+    """'이 컬럼은 항상 이렇게 처리' 규칙 추가/갱신(같은 헤더는 덮어씀).
+    options: 방식의 조절값 {"keep": 4} / {"percent": 10} 등. 없으면 기본값이 저장된다."""
     match = str(header).strip()
     if not match:
         return
-    mode = mode if mode in _MODE_FN else "full"
+    mode, opts = resolve_mode(mode, options)   # 옛 이름 정리 + 빠진 설정값 채움
     rules = [r for r in _load_rules() if r.get("match") != match]
-    rules.append({"match": match, "mode": mode,
+    rules.append({"match": match, "mode": mode, "options": opts,
                   "type": type_label or match, "grade": grade})
     _save_rules(rules)
 
@@ -499,7 +640,7 @@ def org_column_masker(header):
         m = str(r.get("match", "")).replace(" ", "")
         if m and m in h:
             return (r.get("type", m), r.get("grade", "S"),
-                    _MODE_FN.get(r.get("mode", "full"), _mask_full))
+                    mode_function(r.get("mode", "full"), r.get("options")))
     return None
 
 
