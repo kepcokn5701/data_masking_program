@@ -1,5 +1,5 @@
 """
-엑셀파일 개인정보 마스킹 — 데스크톱 GUI
+데이터 보안처리 프로그램 — 데스크톱 GUI
 ────────────────────────────────────────────────────────────
 마스킹 로직은 공용 엔진(masking_engine.py)에 있으며 웹서버(web/app.py)와 공유한다.
 이 파일은 tkinter 화면만 담당한다.
@@ -33,7 +33,7 @@ def _risk_style(pct):
 class MaskingApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("엑셀파일 개인정보 마스킹")
+        self.title("데이터 보안처리 프로그램")
         self.geometry("880x720")
         self.minsize(820, 640)
         self.configure(bg="#f4f6f9")
@@ -48,7 +48,7 @@ class MaskingApp(tk.Tk):
     def _build_ui(self):
         hdr = tk.Frame(self, bg="#1e3a5f", pady=12)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="🔒  엑셀파일 개인정보 마스킹",
+        tk.Label(hdr, text="🔒  데이터 보안처리 프로그램",
                  font=("맑은 고딕", 15, "bold"), fg="white", bg="#1e3a5f").pack()
         tk.Label(hdr, text="개인정보(이름·전화·주민번호 등)를 별표(*)로 가려 안전한 사본을 만듭니다",
                  font=("맑은 고딕", 9), fg="#bcd0e8", bg="#1e3a5f").pack(pady=(2, 0))

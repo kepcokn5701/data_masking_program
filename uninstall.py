@@ -29,10 +29,10 @@ EXTS = (".xlsx", ".xls", ".csv")
 
 
 def _data_dir():
-    """mask_cli/app_tray 와 동일 규칙 — 데이터가 어디 쌓였는지 찾기 위함."""
-    if getattr(sys, "frozen", False):
-        return os.path.join(os.path.expanduser("~"), "Documents", "엑셀파일_개인정보_마스킹")
-    return os.path.dirname(os.path.abspath(__file__))
+    """설정·규칙·감사로그 폴더 — 공용 코어(masking_engine)의 정의를 그대로 쓴다.
+    네 군데에 같은 코드를 복사해 두면 한쪽만 고쳐져 서로 다른 폴더를 보게 된다."""
+    from masking_engine import data_dir
+    return data_dir()
 
 
 # ── 1) 레지스트리 원복 ─────────────────────────────────────────

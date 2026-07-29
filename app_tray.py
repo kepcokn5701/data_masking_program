@@ -1,5 +1,5 @@
 """
-엑셀파일 개인정보 마스킹 — 트레이 통합 앱 (메인 실행 파일)
+데이터 보안처리 프로그램 — 트레이 통합 앱 (메인 실행 파일)
 ────────────────────────────────────────────────────────────
 · 작업표시줄(시계 옆) 트레이에 상주한다.
 · 트레이 아이콘을 클릭하면 '마스킹 도구' 창이 열린다(파일 선택→마스킹).
@@ -23,11 +23,10 @@ import register_context_menu as ctxmenu
 
 
 def _data_dir():
-    """설치형(frozen)은 사용자 '문서' 폴더(쓰기 가능), 개발 시엔 스크립트 폴더.
-    (Program Files에 설치되면 그 폴더엔 쓸 수 없으므로 데이터는 사용자 폴더에 둔다.)"""
-    if getattr(sys, "frozen", False):
-        return os.path.join(os.path.expanduser("~"), "Documents", "엑셀파일_개인정보_마스킹")
-    return os.path.dirname(os.path.abspath(__file__))
+    """설정·규칙·감사로그 폴더 — 공용 코어(masking_engine)의 정의를 그대로 쓴다.
+    네 군데에 같은 코드를 복사해 두면 한쪽만 고쳐져 서로 다른 폴더를 보게 된다."""
+    from masking_engine import data_dir
+    return data_dir()
 
 
 WATCH = os.path.join(_data_dir(), "자동_마스킹_폴더")
@@ -192,9 +191,9 @@ def main():
     icon = pystray.Icon(
         "n2sf_mask",
         icon=_icon_image(True),
-        title="엑셀파일 개인정보 마스킹",
+        title="데이터 보안처리 프로그램",
         menu=Menu(
-            MenuItem("마스킹 도구 열기", show, default=True),
+            MenuItem("보안처리 도구 열기", show, default=True),
             MenuItem("📖 사용설명서 열기", open_manual),
             Menu.SEPARATOR,
             MenuItem("자동 마스킹 폴더 열기 (넣으면 자동 처리)", open_folder(WATCH)),
@@ -219,12 +218,12 @@ def main():
         try:
             import make_manual
             make_manual.open_manual()                # 설명서 HTML 생성 후 브라우저로 열기
-            _notify(icon, "엑셀파일 개인정보 마스킹 — 설치 완료",
+            _notify(icon, "데이터 보안처리 프로그램 — 설치 완료",
                     "시계 옆 트레이에 상주합니다.\n"
                     "아이콘을 클릭하면 마스킹 도구가 열립니다.")
         except Exception as e:
             # 설명서를 못 열어도 최소한 '켜졌다'는 것은 알려야 한다
-            _notify(icon, "엑셀파일 개인정보 마스킹 실행됨",
+            _notify(icon, "데이터 보안처리 프로그램 실행됨",
                     f"시계 옆 트레이 아이콘을 클릭해 사용하세요.\n(설명서 열기 실패: {e})")
         try:
             with open(FIRST_RUN_FLAG, "w", encoding="utf-8") as f:

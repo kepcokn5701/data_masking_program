@@ -33,10 +33,10 @@ except Exception:
 
 
 def _data_dir():
-    """설치형(frozen)은 사용자 '문서' 폴더, 개발 시엔 스크립트 폴더 (앱들과 동일 규칙)."""
-    if getattr(sys, "frozen", False):
-        return os.path.join(os.path.expanduser("~"), "Documents", "엑셀파일_개인정보_마스킹")
-    return os.path.dirname(os.path.abspath(__file__))
+    """설정·규칙·감사로그 폴더 — 공용 코어(masking_engine)의 정의를 그대로 쓴다.
+    네 군데에 같은 코드를 복사해 두면 한쪽만 고쳐져 서로 다른 폴더를 보게 된다."""
+    from masking_engine import data_dir
+    return data_dir()
 
 
 HTML = r"""<!DOCTYPE html>
@@ -44,7 +44,7 @@ HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>엑셀파일 개인정보 마스킹 · 사용설명서</title>
+<title>데이터 보안처리 프로그램 · 사용설명서</title>
 <style>
   :root{
     --navy:#16324f; --blue:#2563eb; --sky:#e8f0fe; --green:#15a34a;
@@ -199,7 +199,7 @@ HTML = r"""<!DOCTYPE html>
 <body>
 <header class="hero">
   <div class="lock">🔒</div>
-  <h1>엑셀파일 개인정보 마스킹</h1>
+  <h1>데이터 보안처리 프로그램</h1>
   <p>컴퓨터를 잘 몰라도 누구나 따라 할 수 있는 사용설명서</p>
 </header>
 
@@ -259,7 +259,7 @@ HTML = r"""<!DOCTYPE html>
         <div class="callout warn" style="margin:10px 0 0">⏳ <b>처음 실행은 10~20초</b>쯤 걸립니다. 창이 바로 안 떠도 기다려 주세요.</div></div>
       <div class="step"><span class="k">2</span><b>화면 오른쪽 아래 시계 옆(트레이)</b>에 자물쇠 아이콘(🔒)이 생깁니다.
         <div class="annot"><div class="shotwrap"><img src="%%SHOT_TRAYICON%%" alt="트레이 자물쇠 아이콘"></div>
-          <ol class="legend"><li class="key"><span class="ln">1</span><span><b>주황 네모로 표시된 자물쇠 아이콘</b> — 이게 이 프로그램입니다(계속 켜져 있어요). 마우스를 올리면 “엑셀파일 개인정보 마스킹” 툴팁이 뜹니다. <b>안 보이면 ∧(위쪽 화살표)</b>를 눌러 숨은 아이콘을 펼치세요.</span></li></ol></div></div>
+          <ol class="legend"><li class="key"><span class="ln">1</span><span><b>주황 네모로 표시된 자물쇠 아이콘</b> — 이게 이 프로그램입니다(계속 켜져 있어요). 마우스를 올리면 “데이터 보안처리 프로그램” 툴팁이 뜹니다. <b>안 보이면 ∧(위쪽 화살표)</b>를 눌러 숨은 아이콘을 펼치세요.</span></li></ol></div></div>
       <div class="step"><span class="k">3</span><b>자물쇠를 마우스 오른쪽 버튼으로 클릭</b> → 나오는 메뉴에서
         <b>[⑥ 오른쪽클릭에 ‘마스킹 사본 만들기’ 추가]</b> 를 한 번 누르세요.
         <div class="annot"><div class="shotwrap"><img src="%%SHOT_TRAYMENU%%" alt="트레이 오른쪽클릭 메뉴">

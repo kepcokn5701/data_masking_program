@@ -33,10 +33,10 @@ KST = timezone(timedelta(hours=9))
 
 # ── 데이터/로그 경로 (app_tray._data_dir() 와 동일 규칙) ──────────
 def _data_dir():
-    """설치형(frozen)은 사용자 '문서' 폴더, 개발 시엔 스크립트 폴더."""
-    if getattr(sys, "frozen", False):
-        return os.path.join(os.path.expanduser("~"), "Documents", "엑셀파일_개인정보_마스킹")
-    return os.path.dirname(os.path.abspath(__file__))
+    """설정·규칙·감사로그 폴더 — 공용 코어(masking_engine)의 정의를 그대로 쓴다.
+    네 군데에 같은 코드를 복사해 두면 한쪽만 고쳐져 서로 다른 폴더를 보게 된다."""
+    from masking_engine import data_dir
+    return data_dir()
 
 
 AUDIT_DIR = os.path.join(_data_dir(), "감사로그")

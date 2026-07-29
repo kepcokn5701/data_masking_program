@@ -1,10 +1,10 @@
-; 엑셀파일 개인정보 마스킹 — 사용자 설치형(관리자 권한 불필요) 인스톨러
+; 데이터 보안처리 프로그램 — 사용자 설치형(관리자 권한 불필요) 인스톨러
 ; Inno Setup 6 스크립트.  컴파일: ISCC.exe installer.iss
-; 결과: installer_output\엑셀파일_개인정보_마스킹_설치.exe
+; 결과: installer_output\데이터_보안처리_프로그램_설치.exe
 
-#define AppName "엑셀파일 개인정보 마스킹"
+#define AppName "데이터 보안처리 프로그램"
 #define AppVer  "1.0"
-#define AppExe  "exel_info_masking_program(N2SF).exe"
+#define AppExe  "data_security_program.exe"
 
 [Setup]
 AppId={{A7E3C1F2-N2SF-4D5E-9A0B-EXELMASK0001}
@@ -18,7 +18,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=installer_output
-OutputBaseFilename=엑셀파일_개인정보_마스킹_설치
+OutputBaseFilename=데이터_보안처리_프로그램_설치
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2

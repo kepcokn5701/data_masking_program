@@ -16,10 +16,45 @@ UI/프레임워크 의존성 없음 — pandas, re 만 사용.
 import io
 import os
 import re
+import sys
 import json
 import random
 from datetime import datetime, date, time
 import openpyxl
+
+# ── 프로그램 이름·데이터 폴더 (여기 한 곳에서만 정한다) ─────────────
+# 화면·설치파일·설명서가 모두 이 값을 가져다 쓴다. 이름을 바꿀 땐 여기만 고친다.
+APP_NAME = "데이터 보안처리 프로그램"
+APP_SHORT = "데이터 보안처리"
+_DATA_DIR_NAME = "데이터_보안처리"
+# 예전 이름으로 만들어진 폴더들 — 사용자가 정해 둔 규칙을 잃지 않도록 이어받는다
+_OLD_DATA_DIR_NAMES = ("엑셀파일_개인정보_마스킹",)
+
+
+def data_dir():
+    """설정·규칙·감사로그를 두는 폴더.
+    설치형(exe)은 사용자 '문서' 폴더 아래, 개발 중에는 소스 폴더를 쓴다.
+    (Program Files에 설치되면 그 폴더엔 쓸 수 없으므로 데이터는 사용자 폴더에 둔다.)
+
+    예전 이름의 폴더가 남아 있으면 새 이름으로 바꿔 그대로 이어 쓴다.
+    옮기지 못하면(파일이 열려 있는 등) 예전 폴더를 계속 쓴다 — 규칙을 잃지 않는 쪽을 택한다.
+    """
+    if not getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(__file__))
+    docs = os.path.join(os.path.expanduser("~"), "Documents")
+    new = os.path.join(docs, _DATA_DIR_NAME)
+    if not os.path.isdir(new):
+        for old in _OLD_DATA_DIR_NAMES:
+            old_path = os.path.join(docs, old)
+            if os.path.isdir(old_path):
+                try:
+                    os.rename(old_path, new)      # 내용은 그대로, 이름만 바꿈
+                except OSError:
+                    return old_path               # 못 바꾸면 예전 폴더를 그대로 사용
+                break
+    os.makedirs(new, exist_ok=True)
+    return new
+
 
 # ── N2SF 근거 (외부 링크 없음 · 원문은 국정원 홈페이지에서 확인하도록 안내) ──
 STANDARD_NAME = "국가 망 보안체계(N2SF) 보안가이드라인 1.0 · 국가정보원(NIS)"

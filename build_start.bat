@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul
-title 엑셀파일 개인정보 마스킹 - 빌드
+title 데이터 보안처리 프로그램 - 빌드
 cd /d "%~dp0"
 
 set PY=python
 where py >nul 2>nul && set PY=py
 
 echo ============================================
-echo   엑셀파일 개인정보 마스킹 - EXE/설치파일 빌드
+echo   데이터 보안처리 프로그램 - EXE/설치파일 빌드
 echo ============================================
 echo.
 echo [1/4] 필요한 패키지 설치/확인...
@@ -16,7 +16,7 @@ if errorlevel 1 ( echo [오류] 패키지 설치 실패 - 인터넷/사내미러
 
 echo.
 echo [2/4] 프로그램(트레이+우클릭 통합) EXE 빌드... (1~3분)
-%PY% -m PyInstaller --onefile --windowed --name "exel_info_masking_program(N2SF)" ^
+%PY% -m PyInstaller --onefile --windowed --name "data_security_program" ^
   --paths "." --hidden-import pystray._win32 ^
   --hidden-import mask_cli --hidden-import register_context_menu --hidden-import uninstall ^
   --hidden-import make_manual --hidden-import manual_assets ^
@@ -28,7 +28,7 @@ if errorlevel 1 ( echo [오류] 프로그램 빌드 실패 & pause & exit /b 1 )
 
 echo.
 echo [3/4] 웹서버 EXE 빌드... (1~3분)
-%PY% -m PyInstaller --onefile --console --name "exel_info_masking_webserver(N2SF)" ^
+%PY% -m PyInstaller --onefile --console --name "data_security_webserver" ^
   --add-data "web/templates;templates" --paths "." --paths "web" ^
   --exclude-module matplotlib --exclude-module scipy --exclude-module PIL ^
   --noconfirm web/app.py
@@ -49,9 +49,9 @@ if defined ISCC (
 echo.
 echo ============================================
 echo   완료!
-echo    - dist\exel_info_masking_program(N2SF).exe   (포터블 프로그램)
-echo    - dist\exel_info_masking_webserver(N2SF).exe (웹서버)
-echo    - installer_output\엑셀파일_개인정보_마스킹_설치.exe (설치파일)
+echo    - dist\data_security_program.exe   (포터블 프로그램)
+echo    - dist\data_security_webserver.exe (웹서버)
+echo    - installer_output\데이터_보안처리_프로그램_설치.exe (설치파일)
 echo ============================================
 explorer dist
 pause
